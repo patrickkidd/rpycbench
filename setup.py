@@ -15,6 +15,13 @@ setup(
         "matplotlib>=3.7.0",
         "psutil>=5.9.0",
     ],
+    extras_require={
+        "dev": [
+            "pytest>=7.4.0",
+            "pytest-timeout>=2.1.0",
+            "pytest-cov>=4.1.0",
+        ],
+    },
     python_requires=">=3.8",
     entry_points={
         "console_scripts": [
