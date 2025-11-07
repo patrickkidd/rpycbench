@@ -775,6 +775,44 @@ metrics.record_system_metrics()
 stats = metrics.compute_statistics()
 ```
 
+## Contributing
+
+### Running Tests
+
+The test suite provides comprehensive coverage for all features:
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest rpycbench/tests/
+
+# Run with verbose output
+pytest rpycbench/tests/ -v
+
+# Run specific test file
+pytest rpycbench/tests/test_concurrency.py
+
+# Run specific test
+pytest rpycbench/tests/test_concurrency.py::TestHighConcurrency::test_128_concurrent_rpyc_connections
+
+# Run with coverage
+pytest rpycbench/tests/ --cov=rpycbench --cov-report=html
+```
+
+**Test Coverage:**
+- Server process isolation and lifecycle
+- All benchmark types (connection, latency, bandwidth, concurrent)
+- High concurrency (128+ connections)
+- Per-connection metrics tracking
+- Telemetry and profiling
+- Metrics computation and statistics
+- End-to-end workflows
+- Error handling and robustness
+
+See `rpycbench/tests/README.md` for detailed test documentation.
+
 ## Requirements
 
 - Python >= 3.8
