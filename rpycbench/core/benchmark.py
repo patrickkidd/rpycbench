@@ -298,7 +298,13 @@ class BandwidthBenchmark(BenchmarkBase):
 
 
 class ConcurrentBenchmark(BenchmarkBase):
-    """Benchmark for measuring concurrent client performance"""
+    """
+    Benchmark for measuring concurrent client performance.
+
+    Supports high concurrency (e.g., 128+ connections) with per-connection
+    metrics tracking. Each client connection runs in its own thread within
+    the client process.
+    """
 
     def __init__(
         self,
@@ -307,28 +313,40 @@ class ConcurrentBenchmark(BenchmarkBase):
         server_mode: Optional[str],
         connection_factory: Callable[[], Any],
         request_func: Callable[[Any], Any],
-        num_clients: int = 10,
+        num_clients: int = 128,  # Default to 128 for high concurrency
         requests_per_client: int = 100,
         max_workers: Optional[int] = None,
+        track_per_connection: bool = False,  # Track individual connection metrics
     ):
         super().__init__(name, protocol, server_mode)
         self.connection_factory = connection_factory
         self.request_func = request_func
         self.num_clients = num_clients
         self.requests_per_client = requests_per_client
-        self.max_workers = max_workers or num_clients
+        self.max_workers = max_workers or min(num_clients, 128)  # Cap thread pool
+        self.track_per_connection = track_per_connection
         self.metrics.concurrent_connections = num_clients
+
+        # Per-connection tracking
+        self.per_connection_metrics = [] if track_per_connection else None
 
     def setup(self):
         """Setup benchmark"""
         pass
 
     def _client_worker(self, client_id: int) -> Dict[str, Any]:
-        """Worker function for each concurrent client"""
+        """
+        Worker function for each concurrent client.
+
+        Each worker establishes its own connection and tracks its metrics.
+        Runs in a separate thread within the client process.
+        """
         client_metrics = {
+            'client_id': client_id,
             'latencies': [],
             'total_requests': 0,
             'failed_requests': 0,
+            'start_time': time.time(),
         }
 
         try:
@@ -339,7 +357,7 @@ class ConcurrentBenchmark(BenchmarkBase):
             client_metrics['connection_time'] = conn_duration
 
             # Make requests
-            for _ in range(self.requests_per_client):
+            for req_num in range(self.requests_per_client):
                 start = time.time()
                 try:
                     self.request_func(connection)
@@ -348,6 +366,10 @@ class ConcurrentBenchmark(BenchmarkBase):
                     client_metrics['total_requests'] += 1
                 except Exception as e:
                     client_metrics['failed_requests'] += 1
+                    if self.track_per_connection:
+                        if 'errors' not in client_metrics:
+                            client_metrics['errors'] = []
+                        client_metrics['errors'].append(f"Request {req_num}: {str(e)}")
 
             # Cleanup
             if hasattr(connection, 'close'):
@@ -356,19 +378,35 @@ class ConcurrentBenchmark(BenchmarkBase):
         except Exception as e:
             client_metrics['connection_error'] = str(e)
 
+        client_metrics['end_time'] = time.time()
+        client_metrics['total_duration'] = client_metrics['end_time'] - client_metrics['start_time']
+
         return client_metrics
 
     def run(self):
-        """Run concurrent benchmark"""
+        """
+        Run concurrent benchmark with all clients in parallel.
+
+        Creates num_clients threads, each establishing its own connection
+        and making requests independently. Tracks aggregate and per-connection
+        metrics.
+        """
+        print(f"  Starting {self.num_clients} concurrent clients...")
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(self._client_worker, i)
                 for i in range(self.num_clients)
             ]
 
+            completed = 0
             for future in concurrent.futures.as_completed(futures):
                 try:
                     result = future.result()
+
+                    # Store per-connection metrics if tracking
+                    if self.track_per_connection:
+                        self.per_connection_metrics.append(result)
 
                     # Aggregate metrics
                     if 'connection_time' in result:
@@ -380,11 +418,29 @@ class ConcurrentBenchmark(BenchmarkBase):
                     self.metrics.total_requests += result['total_requests']
                     self.metrics.failed_requests += result['failed_requests']
 
+                    completed += 1
+                    if completed % 10 == 0:
+                        print(f"    {completed}/{self.num_clients} clients completed...")
+
                 except Exception as e:
                     self.metrics.failed_requests += self.requests_per_client
                     self.metrics.metadata['errors'] = self.metrics.metadata.get('errors', [])
                     self.metrics.metadata['errors'].append(str(e))
+                    completed += 1
+
+        print(f"  All {self.num_clients} clients completed")
+
+        # Store per-connection summary if tracking
+        if self.track_per_connection:
+            self.metrics.metadata['per_connection_count'] = len(self.per_connection_metrics)
+            self.metrics.metadata['per_connection_available'] = True
 
     def teardown(self):
         """Cleanup benchmark"""
         pass
+
+    def get_per_connection_metrics(self) -> List[Dict[str, Any]]:
+        """Get per-connection metrics if tracking is enabled"""
+        if not self.track_per_connection:
+            return []
+        return self.per_connection_metrics

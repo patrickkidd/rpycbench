@@ -502,30 +502,37 @@ See the `examples/` directory for complete profiling examples:
 
 ### Server Execution Model
 
-**Important**: All benchmark servers run in the **same process** as the benchmark code, but in separate background daemon threads. This means:
+**Important**: All benchmark servers run in **separate processes** from the benchmark client code. This provides true isolation without GIL interference:
 
 1. **Server Lifecycle**:
-   - Servers are started in a background thread before each test
+   - Server is spawned in a separate process before each test
+   - Server lifecycle is automatically managed by the parent process
    - Tests run against the server
-   - Servers are stopped after the test completes
+   - Server is cleanly terminated after the test completes
    - Each server type is tested **sequentially** (one at a time)
 
-2. **Thread vs Process Handling**:
-   - **RPyC ThreadedServer**: Server runs in thread, creates NEW THREAD per client connection
-   - **RPyC ForkingServer**: Server runs in thread, FORKS NEW PROCESS per client connection
-   - **HTTP ThreadedServer**: Flask server runs in thread, handles requests in threads (when `threaded=True`)
+2. **Process Isolation** (✅ No GIL Interference):
+   - **Server Process**: Runs completely independently from client
+   - **Client Process**: Runs 128+ concurrent client threads without GIL from server
+   - **Benefits**: True parallelism, accurate performance metrics, production-like environment
 
-3. **Isolation**:
-   - ✅ Tests are isolated from each other (sequential execution)
-   - ✅ Each server gets a clean start/stop cycle
-   - ⚠️ Server and benchmark code share the same process (GIL may affect Python-heavy workloads)
-   - ⚠️ System resources (CPU, memory) are shared
+3. **Server Threading Models**:
+   - **RPyC ThreadedServer**: Creates NEW THREAD per client connection (in server process)
+   - **RPyC ForkingServer**: FORKS NEW PROCESS per client connection (from server process)
+   - **HTTP ThreadedServer**: Flask handles requests in threads (in server process)
 
-4. **What This Means for Your Benchmarks**:
-   - Results reflect real-world performance on the same hardware
-   - CPU/memory metrics include both server and client overhead
-   - For production comparison, consider running servers in separate processes
-   - The benchmark suite prioritizes ease of use over strict isolation
+4. **Client Concurrency**:
+   - Default: **128 concurrent connections** from single client process
+   - Each connection runs in its own thread within the client process
+   - Configurable: Can test with any number of concurrent clients
+   - Per-connection metrics tracking available
+
+5. **Why This Design?**:
+   - ✅ **No GIL interference** between server and client
+   - ✅ **Easy to use** - single script, automatic lifecycle management
+   - ✅ **Production-like** - tests real server modes (threaded, forking)
+   - ✅ **High concurrency** - test with 128+ parallel connections
+   - ✅ **Accurate metrics** - server runs unencumbered by client GIL
 
 ### Port Usage
 
@@ -720,6 +727,7 @@ See the `examples/` directory for complete examples:
 
 **Benchmarking:**
 - `baseline_comparison.py` - Quick baseline comparison of RPyC vs HTTP
+- `high_concurrency_128.py` - 128 parallel connections with per-connection metrics
 - `autonomous_run.py` - Running full benchmark suite autonomously
 - `context_manager_basic.py` - Basic context manager usage
 - `context_manager_app_integration.py` - Integration with application code
@@ -729,3 +737,20 @@ See the `examples/` directory for complete examples:
 - `profiling_basic.py` - Basic RPyC profiling
 - `profiling_advanced.py` - Advanced profiling with visualization
 - `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
+
+**High Concurrency:**
+
+Test 128 parallel connections and compare server modes:
+```bash
+# Test RPyC with 128 concurrent connections
+python examples/high_concurrency_128.py --rpyc
+
+# Test HTTP with 128 concurrent connections
+python examples/high_concurrency_128.py --http
+
+# Compare threaded vs forking server modes
+python examples/high_concurrency_128.py --compare
+
+# Run all tests
+python examples/high_concurrency_128.py
+```

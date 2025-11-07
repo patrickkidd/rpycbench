@@ -146,6 +146,7 @@ class BenchmarkSuite:
             request_func=lambda conn: conn.root.ping(),
             num_clients=num_concurrent_clients,
             requests_per_client=requests_per_client,
+            track_per_connection=False,  # Disable for suite (enable manually if needed)
         )
         metrics = conc_bench.execute()
         self.results.add_result(metrics)
@@ -209,6 +210,7 @@ class BenchmarkSuite:
             request_func=lambda session: session.get(f"{self.http_base_url}/ping"),
             num_clients=num_concurrent_clients,
             requests_per_client=requests_per_client,
+            track_per_connection=False,  # Disable for suite (enable manually if needed)
         )
         metrics = conc_bench.execute()
         self.results.add_result(metrics)
