@@ -23,11 +23,36 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
   - **Context Managers**: Integrate benchmarks into your application code
   - Compare baseline performance vs. application overhead
 
+- **RPyC Profiling & Telemetry** (NEW!)
+  - Track network round trips in real-time
+  - Monitor netref creation and lifecycle
+  - Visualize call stacks and nesting depth
+  - Detect slow calls automatically
+  - ASCII call tree and timeline visualization
+  - Diagnose performance bottlenecks in your RPyC applications
+
 ## Installation
+
+### From GitHub Releases (Recommended)
+
+Every push to master automatically builds a wheel. Install the latest version:
+
+```bash
+# Get the latest wheel URL from releases and install directly
+pip install https://github.com/patrickkidd/rpycbench/releases/latest/download/rpycbench-0.1.0-py3-none-any.whl
+```
+
+Or download and install:
+```bash
+wget https://github.com/patrickkidd/rpycbench/releases/latest/download/rpycbench-0.1.0-py3-none-any.whl
+pip install rpycbench-0.1.0-py3-none-any.whl
+```
+
+### From Source
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/patrickkidd/rpycbench.git
 cd rpycbench
 
 # Install dependencies
@@ -206,6 +231,187 @@ Output Options:
   --output FILE, -o FILE    Save JSON results to file
   --quiet, -q               Suppress summary output
 ```
+
+## RPyC Profiling & Telemetry
+
+Profile and diagnose performance issues in your RPyC applications by tracking network round trips, netref usage, and call patterns.
+
+### Quick Profiling Example
+
+```python
+from rpycbench.utils.profiler import create_profiled_connection
+from rpycbench.utils.telemetry import RPyCTelemetry
+from rpycbench.servers.rpyc_servers import RPyCServer
+
+# Start server
+with RPyCServer(host='localhost', port=18812, mode='threaded'):
+
+    # Create telemetry instance
+    telemetry = RPyCTelemetry(
+        enabled=True,
+        track_netrefs=True,
+        slow_call_threshold=0.1,  # 100ms
+        deep_stack_threshold=5,    # Warn on 5+ nested calls
+    )
+
+    # Create profiled connection
+    conn = create_profiled_connection(
+        host='localhost',
+        port=18812,
+        telemetry_inst=telemetry,
+    )
+
+    # Make remote calls - they're automatically tracked!
+    for i in range(10):
+        conn.root.ping()
+
+    conn.close()
+
+    # Print comprehensive telemetry report
+    telemetry.print_summary()
+```
+
+### What Gets Tracked
+
+1. **Network Round Trips**: Count every remote call
+2. **NetRef Operations**: Track netref creation, access, and lifecycle
+3. **Call Stacks**: Monitor nesting depth and call chains
+4. **Slow Calls**: Automatically detect calls exceeding threshold
+5. **Performance**: Latency per call, total duration, resource usage
+
+### Profiling Output
+
+```
+================================================================================
+RPYC TELEMETRY SUMMARY
+================================================================================
+Total Calls:              45
+Network Round Trips:      45
+NetRefs Created:          3
+Active NetRefs:           1
+Current Stack Depth:      0
+Max Stack Depth:          3
+Slow Calls (>0.1s):       2
+Avg Call Duration:        12.34ms
+
+--------------------------------------------------------------------------------
+SLOW CALLS:
+--------------------------------------------------------------------------------
+  process_large_batch              150.23ms  depth=0
+  nested_computation                120.45ms  depth=2
+
+--------------------------------------------------------------------------------
+DEEP CALL STACKS (>5 levels):
+--------------------------------------------------------------------------------
+  Depth: 6
+    → get_object (method)
+    → access_property (getattr)
+    → call_method (method)
+    → another_call (method)
+    ...
+```
+
+### Visualization Tools
+
+```python
+from rpycbench.utils.visualizer import (
+    format_call_tree,
+    format_timeline,
+    format_netref_report,
+    format_slow_calls_report,
+)
+
+# Call tree shows nesting and hierarchy
+print(format_call_tree(telemetry))
+
+# Timeline shows when calls happened
+print(format_timeline(telemetry, width=80))
+
+# NetRef report shows object usage
+print(format_netref_report(telemetry))
+
+# Slow calls report with details
+print(format_slow_calls_report(telemetry, top_n=20))
+```
+
+### Using with Context Manager
+
+```python
+from rpycbench.utils.profiler import profile_rpyc_calls
+
+conn = rpyc.connect('localhost', 18812)
+
+with profile_rpyc_calls(conn, slow_call_threshold=0.05) as profiled:
+    # Use profiled connection
+    profiled.root.some_method()
+
+# Telemetry summary automatically printed on exit
+```
+
+### Diagnosing Performance Issues
+
+Common issues the profiler helps identify:
+
+1. **Excessive Round Trips**
+   ```python
+   # BAD: N round trips
+   for item in items:
+       conn.root.process(item)  # Each call = 1 round trip
+
+   # Profiler shows: 100 round trips for 100 items
+   ```
+
+2. **NetRef Overhead**
+   ```python
+   # Each netref access is a network call
+   obj = conn.root.get_object()  # Creates netref
+   obj.property  # Network call!
+   obj.method()  # Network call!
+
+   # Profiler shows: NetRef created with 10 accesses
+   ```
+
+3. **Deep Call Stacks**
+   ```python
+   # Nested remote calls create latency
+   conn.root.a()  # Which calls b()
+     # Which calls c()
+       # Which calls d()
+
+   # Profiler shows: Stack depth of 4, total latency accumulates
+   ```
+
+### Integration with Benchmarks
+
+Combine profiling with benchmarking to understand both baseline and actual performance:
+
+```python
+from rpycbench.core.benchmark import BenchmarkContext
+from rpycbench.utils.profiler import create_profiled_connection
+
+conn = create_profiled_connection('localhost', 18812)
+
+# Benchmark with profiling
+with BenchmarkContext("My App", "rpyc", measure_latency=True) as bench:
+    for _ in range(100):
+        with bench.measure_request():
+            conn.root.my_method()
+            bench.record_request(success=True)
+
+# Get both benchmark metrics AND telemetry
+metrics = bench.get_results()
+telemetry = conn.telemetry
+
+print(f"Latency: {metrics.compute_statistics()['latency']['mean']*1000:.2f}ms")
+print(f"Round trips: {telemetry.total_network_roundtrips}")
+```
+
+### Examples
+
+See the `examples/` directory for complete profiling examples:
+- `profiling_basic.py` - Basic profiling usage
+- `profiling_advanced.py` - Advanced features and visualization
+- `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
 
 ## Architecture
 
