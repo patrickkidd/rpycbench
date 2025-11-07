@@ -2,6 +2,20 @@
 
 A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) with HTTP/REST performance across multiple dimensions.
 
+## Quick Install
+
+Always get the latest version with a single command:
+
+```bash
+# Using Python (works everywhere)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.py | python3
+
+# Or using bash (Linux/Mac)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.sh | bash
+```
+
+This automatically fetches and installs the latest wheel from GitHub releases - no version string needed!
+
 ## Features
 
 - **Comprehensive Metrics**
@@ -14,16 +28,18 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
   - RPyC: Threaded server, Forking server
   - HTTP: Flask-based threaded server
 
-- **Concurrent Client Testing**
-  - Test performance with multiple simultaneous clients
-  - Measure connection pooling effectiveness
+- **High Concurrency Testing**
+  - Default: 128 parallel connections from single client
+  - Server runs in separate process (no GIL interference)
+  - Per-connection metrics tracking
+  - Compare server modes under load
 
 - **Flexible Usage**
   - **Autonomous Mode**: Run complete benchmark suite standalone
   - **Context Managers**: Integrate benchmarks into your application code
   - Compare baseline performance vs. application overhead
 
-- **RPyC Profiling & Telemetry** (NEW!)
+- **RPyC Profiling & Telemetry**
   - Track network round trips in real-time
   - Monitor netref creation and lifecycle
   - Visualize call stacks and nesting depth
@@ -31,21 +47,9 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
   - ASCII call tree and timeline visualization
   - Diagnose performance bottlenecks in your RPyC applications
 
-## Installation
+## Installation Options
 
-### Quick Install/Upgrade (Recommended)
-
-Always get the latest version with a single command:
-
-```bash
-# Using Python (works everywhere)
-curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.py | python3
-
-# Or using bash (Linux/Mac)
-curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.sh | bash
-```
-
-This automatically fetches and installs the latest wheel from GitHub releases.
+The quick install above is recommended, but here are other options:
 
 ### Manual Installation from GitHub Releases
 
