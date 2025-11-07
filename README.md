@@ -33,20 +33,33 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
 
 ## Installation
 
-### From GitHub Releases (Recommended)
+### Quick Install/Upgrade (Recommended)
 
-Every push to master automatically builds a wheel. Install the latest version:
+Always get the latest version with a single command:
 
 ```bash
-# Get the latest wheel URL from releases and install directly
-pip install https://github.com/patrickkidd/rpycbench/releases/latest/download/rpycbench-0.1.0-py3-none-any.whl
+# Using Python (works everywhere)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.py | python3
+
+# Or using bash (Linux/Mac)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.sh | bash
 ```
 
-Or download and install:
+This automatically fetches and installs the latest wheel from GitHub releases.
+
+### Manual Installation from GitHub Releases
+
+Every push to master automatically builds a wheel. Install a specific version:
+
 ```bash
-wget https://github.com/patrickkidd/rpycbench/releases/latest/download/rpycbench-0.1.0-py3-none-any.whl
-pip install rpycbench-0.1.0-py3-none-any.whl
+# Install specific version
+pip install https://github.com/patrickkidd/rpycbench/releases/download/v0.1.0-build.123/rpycbench-0.1.0-py3-none-any.whl
+
+# Upgrade to a specific version
+pip install --upgrade --force-reinstall https://github.com/patrickkidd/rpycbench/releases/download/v0.1.0-build.123/rpycbench-0.1.0-py3-none-any.whl
 ```
+
+Browse all releases: https://github.com/patrickkidd/rpycbench/releases
 
 ### From Source
 
