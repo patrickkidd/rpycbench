@@ -2,23 +2,44 @@
 
 A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) with HTTP/REST performance across multiple dimensions.
 
-## Quick Install
+## Table of Contents
 
-Always get the latest version with a single command:
+- [Features & Architecture](#features--architecture)
+- [Quick Install](#quick-install)
+- [Installation Options](#installation-options)
+- [Quick Start](#quick-start)
+  - [Autonomous Mode](#autonomous-mode)
+  - [Baseline Comparison](#baseline-comparison-rpyc-vs-http)
+  - [Using as Context Managers](#using-as-context-managers)
+- [Usage Examples](#usage-examples)
+- [Command Line Options](#command-line-options)
+- [RPyC Profiling & Telemetry](#rpyc-profiling--telemetry)
+- [How It Works: Threading Model & Isolation](#how-it-works-threading-model--isolation)
+- [Benchmark Types](#benchmark-types)
+- [Output Format](#output-format)
+- [Architecture (Directory Structure)](#architecture)
+- [Extending the Suite](#extending-the-suite)
+- [Requirements](#requirements)
+- [Contributing](#contributing)
+- [License](#license)
+- [Examples](#examples)
 
-```bash
-# Using Python (works everywhere)
-curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.py | python3
+## Features & Architecture
 
-# Or using bash (Linux/Mac)
-curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.sh | bash
-```
+rpycbench measures RPyC vs HTTP/REST performance across four dimensions:
 
-This automatically fetches and installs the latest wheel from GitHub releases - no version string needed!
+1. **Connection Time**: Initial handshake and connection establishment
+2. **Latency**: Round-trip time for request/response pairs (with percentile analysis)
+3. **Bandwidth**: Data transfer rates for various payload sizes
+4. **Concurrency**: Performance under load with multiple simultaneous connections
 
-**How it works**: The script queries the GitHub API for the latest release, extracts the wheel URL, and runs `pip install --upgrade --force-reinstall` on it. This ensures you always get the most recent build without manually tracking version numbers.
+**What's Being Measured**:
+- RPyC uses binary protocol over raw sockets with Python object serialization
+- HTTP uses JSON over REST with request/response overhead
+- Tests measure both baseline protocol performance and real-world usage patterns
+- Profiler identifies bottlenecks like excessive round trips and netref overhead
 
-## Features
+**Key Capabilities**:
 
 - **Comprehensive Metrics**
   - Connection establishment time
@@ -48,6 +69,29 @@ This automatically fetches and installs the latest wheel from GitHub releases - 
   - Detect slow calls automatically
   - ASCII call tree and timeline visualization
   - Diagnose performance bottlenecks in your RPyC applications
+
+**Design Principles**:
+- **Separate Processes**: Servers run in isolated processes to eliminate GIL interference
+- **Multiple Server Modes**: RPyC threaded/forking vs HTTP threaded
+- **High Concurrency**: Default 128 parallel client connections from single process
+- **Context Managers**: Embed benchmarks directly into application code
+- **Profiling**: Track RPyC network round trips, netref usage, and call patterns
+
+## Quick Install
+
+Always get the latest version with a single command:
+
+```bash
+# Using Python (works everywhere)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.py | python3
+
+# Or using bash (Linux/Mac)
+curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-latest.sh | bash
+```
+
+This automatically fetches and installs the latest wheel from GitHub releases - no version string needed!
+
+**How it works**: The script queries the GitHub API for the latest release, extracts the wheel URL, and runs `pip install --upgrade --force-reinstall` on it. This ensures you always get the most recent build without manually tracking version numbers.
 
 ## Installation Options
 
@@ -264,28 +308,6 @@ app_lat = app_metrics.compute_statistics()['latency']['mean']
 overhead = app_lat - baseline_lat
 print(f"App overhead: {overhead*1000:.2f}ms")
 ```
-
-## Architecture Overview
-
-rpycbench measures RPyC vs HTTP/REST performance across four dimensions:
-
-1. **Connection Time**: Initial handshake and connection establishment
-2. **Latency**: Round-trip time for request/response pairs (with percentile analysis)
-3. **Bandwidth**: Data transfer rates for various payload sizes
-4. **Concurrency**: Performance under load with multiple simultaneous connections
-
-**Key Design**:
-- **Separate Processes**: Servers run in isolated processes to eliminate GIL interference
-- **Multiple Server Modes**: RPyC threaded/forking vs HTTP threaded
-- **High Concurrency**: Default 128 parallel client connections from single process
-- **Context Managers**: Embed benchmarks directly into application code
-- **Profiling**: Track RPyC network round trips, netref usage, and call patterns
-
-**What's Being Measured**:
-- RPyC uses binary protocol over raw sockets with Python object serialization
-- HTTP uses JSON over REST with request/response overhead
-- Tests measure both baseline protocol performance and real-world usage patterns
-- Profiler identifies bottlenecks like excessive round trips and netref overhead
 
 ### Example 3: Baseline Comparison
 
