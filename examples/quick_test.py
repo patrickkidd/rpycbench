@@ -15,9 +15,9 @@ def main():
         test_rpyc_threaded=True,
         test_rpyc_forking=False,  # Skip forking for speed
         test_http=True,
-        num_connections=10,
+        num_serial_connections=10,
         num_requests=50,
-        num_concurrent_clients=3,
+        num_parallel_clients=3,
         requests_per_client=10,
     )
 

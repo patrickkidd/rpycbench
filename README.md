@@ -108,10 +108,10 @@ rpycbench --output results.json
 
 ```bash
 # Test only latency
-rpycbench --num-connections 10 --num-requests 5000
+rpycbench --num-serial-connections 10 --num-requests 5000
 
 # Test only concurrency
-rpycbench --num-concurrent-clients 50 --requests-per-client 200
+rpycbench --num-parallel-clients 50 --requests-per-client 200
 
 # Test only binary transfers
 rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760
@@ -126,9 +126,9 @@ rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760
 ```bash
 rpycbench \
   --skip-rpyc-forking \
-  --num-connections 10 \
+  --num-serial-connections 10 \
   --num-requests 100 \
-  --num-concurrent-clients 5
+  --num-parallel-clients 5
 ```
 
 **What it tests**: Basic connectivity, latency, and light concurrency
@@ -143,8 +143,8 @@ rpycbench \
 ```bash
 rpycbench \
   --num-requests 10000 \
-  --num-connections 1 \
-  --num-concurrent-clients 1
+  --num-serial-connections 1 \
+  --num-parallel-clients 1
 ```
 
 **What it tests**: P50, P95, P99 latency with large sample size
@@ -159,7 +159,7 @@ rpycbench \
 
 ```bash
 rpycbench \
-  --num-concurrent-clients 128 \
+  --num-parallel-clients 128 \
   --requests-per-client 500 \
   --skip-rpyc-forking
 ```
@@ -176,9 +176,9 @@ rpycbench \
 
 ```bash
 rpycbench \
-  --num-connections 10 \
+  --num-serial-connections 10 \
   --num-requests 100 \
-  --num-concurrent-clients 1
+  --num-parallel-clients 1
 ```
 
 **What it tests**: Upload/download bandwidth for 1KB - 1MB payloads
@@ -218,7 +218,7 @@ rpycbench --test-binary-transfer \
 
 ```bash
 rpycbench \
-  --num-concurrent-clients 32 \
+  --num-parallel-clients 32 \
   --requests-per-client 100
 ```
 
@@ -234,9 +234,9 @@ rpycbench \
 
 ```bash
 rpycbench \
-  --num-connections 50 \
+  --num-serial-connections 50 \
   --num-requests 2000 \
-  --num-concurrent-clients 20 \
+  --num-parallel-clients 20 \
   --requests-per-client 200 \
   --test-binary-transfer \
   --binary-file-sizes 1048576 \
@@ -258,7 +258,7 @@ rpycbench \
 rpycbench \
   --skip-rpyc-threaded \
   --skip-http \
-  --num-concurrent-clients 10
+  --num-parallel-clients 10
 ```
 
 **What it tests**: RPyC forking server isolation
@@ -292,9 +292,9 @@ rpycbench \
 ```bash
 rpycbench \
   --skip-rpyc-forking \
-  --num-connections 1 \
+  --num-serial-connections 1 \
   --num-requests 10000 \
-  --num-concurrent-clients 1
+  --num-parallel-clients 1
 ```
 
 **What it tests**: Single connection, sequential requests
@@ -329,10 +329,12 @@ rpycbench [options]
 ### Benchmark Parameters
 
 ```
---num-connections N       Number of connections (default: 100)
---num-requests N          Number of requests (default: 1000)
---num-concurrent-clients N Number of concurrent clients (default: 10)
---requests-per-client N   Requests per client (default: 100)
+--num-serial-connections N    Sample size: number of serial connections created one-at-a-time
+                              to measure average connection establishment time (default: 100)
+--num-requests N              Sample size: number of requests for latency benchmark (default: 1000)
+--num-parallel-clients N      Number of parallel clients (simultaneous connections to
+                              measure performance under load) (default: 10)
+--requests-per-client N       Requests per parallel client (default: 100)
 ```
 
 ### Binary Transfer Benchmark
@@ -362,9 +364,9 @@ rpycbench \
   --rpyc-port 18812 \
   --http-host localhost \
   --http-port 5000 \
-  --num-connections 200 \
+  --num-serial-connections 200 \
   --num-requests 5000 \
-  --num-concurrent-clients 50 \
+  --num-parallel-clients 50 \
   --requests-per-client 100 \
   --test-binary-transfer \
   --binary-file-sizes 1048576 10485760 52428800 \
@@ -376,9 +378,9 @@ rpycbench \
 rpycbench \
   --skip-rpyc-forking \
   --skip-http \
-  --num-connections 5 \
+  --num-serial-connections 5 \
   --num-requests 50 \
-  --num-concurrent-clients 2 \
+  --num-parallel-clients 2 \
   --quiet
 ```
 

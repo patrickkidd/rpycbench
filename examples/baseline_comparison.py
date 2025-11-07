@@ -41,9 +41,9 @@ def run_baseline_comparison():
         test_rpyc_threaded=True,
         test_rpyc_forking=False,  # Skip forking for baseline
         test_http=True,
-        num_connections=100,       # Connection establishment
-        num_requests=1000,         # Latency testing
-        num_concurrent_clients=10, # Concurrent load
+        num_serial_connections=100,       # Connection establishment
+        num_requests=1000,                # Latency testing
+        num_parallel_clients=10,          # Concurrent load
         requests_per_client=100,
     )
 
@@ -75,9 +75,9 @@ def run_quick_baseline():
         test_rpyc_threaded=True,
         test_rpyc_forking=False,
         test_http=True,
-        num_connections=20,
+        num_serial_connections=20,
         num_requests=100,
-        num_concurrent_clients=3,
+        num_parallel_clients=3,
         requests_per_client=20,
     )
 

@@ -37,9 +37,9 @@ def run_binary_transfer_full():
         binary_file_sizes=[1_572_864, 134_217_728, 524_288_000],  # 1.5MB, 128MB, 500MB
         binary_chunk_size=65_536,  # 64KB
         binary_iterations=3,
-        num_connections=10,
+        num_serial_connections=10,
         num_requests=10,
-        num_concurrent_clients=1,
+        num_parallel_clients=1,
     )
 
     results.print_summary()
@@ -75,9 +75,9 @@ def run_binary_transfer_quick():
         binary_file_sizes=[1_048_576, 10_485_760],  # 1MB, 10MB
         binary_chunk_size=8_192,  # 8KB
         binary_iterations=2,
-        num_connections=5,
+        num_serial_connections=5,
         num_requests=5,
-        num_concurrent_clients=1,
+        num_parallel_clients=1,
     )
 
     results.print_summary()

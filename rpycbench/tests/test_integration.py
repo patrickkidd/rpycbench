@@ -25,9 +25,9 @@ class TestEndToEnd:
             test_rpyc_threaded=True,
             test_rpyc_forking=False,  # Skip for speed
             test_http=True,
-            num_connections=5,
+            num_serial_connections=5,
             num_requests=10,
-            num_concurrent_clients=3,
+            num_parallel_clients=3,
             requests_per_client=5,
         )
 

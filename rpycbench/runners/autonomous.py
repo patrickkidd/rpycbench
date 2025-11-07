@@ -59,10 +59,10 @@ def main():
 
     # Benchmark parameters
     parser.add_argument(
-        '--num-connections',
+        '--num-serial-connections',
         type=int,
         default=100,
-        help='Number of connections for connection benchmark'
+        help='Sample size: number of serial connections created one-at-a-time to measure average connection establishment time'
     )
     parser.add_argument(
         '--num-requests',
@@ -71,16 +71,16 @@ def main():
         help='Number of requests for latency benchmark'
     )
     parser.add_argument(
-        '--num-concurrent-clients',
+        '--num-parallel-clients',
         type=int,
         default=10,
-        help='Number of concurrent clients'
+        help='Number of parallel clients (simultaneous connections to measure performance under load)'
     )
     parser.add_argument(
         '--requests-per-client',
         type=int,
         default=100,
-        help='Number of requests per concurrent client'
+        help='Number of requests per parallel client'
     )
 
     # Binary transfer benchmark
@@ -137,9 +137,9 @@ def main():
             test_rpyc_threaded=not args.skip_rpyc_threaded,
             test_rpyc_forking=not args.skip_rpyc_forking,
             test_http=not args.skip_http,
-            num_connections=args.num_connections,
+            num_serial_connections=args.num_serial_connections,
             num_requests=args.num_requests,
-            num_concurrent_clients=args.num_concurrent_clients,
+            num_parallel_clients=args.num_parallel_clients,
             requests_per_client=args.requests_per_client,
             test_binary_transfer=args.test_binary_transfer,
             binary_file_sizes=args.binary_file_sizes,

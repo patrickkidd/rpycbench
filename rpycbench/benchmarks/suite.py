@@ -37,9 +37,9 @@ class BenchmarkSuite:
         test_rpyc_threaded=True,
         test_rpyc_forking=True,
         test_http=True,
-        num_connections=100,
+        num_serial_connections=100,
         num_requests=1000,
-        num_concurrent_clients=10,
+        num_parallel_clients=10,
         requests_per_client=100,
         test_binary_transfer=False,
         binary_file_sizes=None,
@@ -57,9 +57,9 @@ class BenchmarkSuite:
             with RPyCServer(self.rpyc_host, self.rpyc_port, mode='threaded') as server:
                 self._run_rpyc_benchmarks(
                     'threaded',
-                    num_connections,
+                    num_serial_connections,
                     num_requests,
-                    num_concurrent_clients,
+                    num_parallel_clients,
                     requests_per_client,
                     test_binary_transfer,
                     binary_file_sizes,
@@ -73,9 +73,9 @@ class BenchmarkSuite:
             with RPyCServer(self.rpyc_host, self.rpyc_port, mode='forking') as server:
                 self._run_rpyc_benchmarks(
                     'forking',
-                    num_connections,
+                    num_serial_connections,
                     num_requests,
-                    num_concurrent_clients,
+                    num_parallel_clients,
                     requests_per_client,
                     test_binary_transfer,
                     binary_file_sizes,
@@ -88,9 +88,9 @@ class BenchmarkSuite:
             print("\n[3/3] Testing HTTP/REST Server...")
             with HTTPBenchmarkServer(self.http_host, self.http_port, threaded=True) as server:
                 self._run_http_benchmarks(
-                    num_connections,
+                    num_serial_connections,
                     num_requests,
-                    num_concurrent_clients,
+                    num_parallel_clients,
                     requests_per_client,
                     test_binary_transfer,
                     binary_file_sizes,
@@ -106,9 +106,9 @@ class BenchmarkSuite:
     def _run_rpyc_benchmarks(
         self,
         server_mode,
-        num_connections,
+        num_serial_connections,
         num_requests,
-        num_concurrent_clients,
+        num_parallel_clients,
         requests_per_client,
         test_binary_transfer,
         binary_file_sizes,
@@ -118,13 +118,13 @@ class BenchmarkSuite:
         """Run all benchmarks for RPyC"""
 
         # Connection Benchmark
-        print(f"  - Connection benchmark ({num_connections} connections)...")
+        print(f"  - Connection benchmark ({num_serial_connections} serial connections)...")
         conn_bench = ConnectionBenchmark(
             name=f"RPyC Connection ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
             connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
-            num_connections=num_connections,
+            num_connections=num_serial_connections,
         )
         metrics = conn_bench.execute()
         self.results.add_result(metrics)
@@ -177,14 +177,14 @@ class BenchmarkSuite:
             self.results.add_result(metrics)
 
         # Concurrent Benchmark
-        print(f"  - Concurrent benchmark ({num_concurrent_clients} clients)...")
+        print(f"  - Concurrent benchmark ({num_parallel_clients} parallel clients)...")
         conc_bench = ConcurrentBenchmark(
             name=f"RPyC Concurrent ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
             connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
             request_func=lambda conn: conn.root.ping(),
-            num_clients=num_concurrent_clients,
+            num_clients=num_parallel_clients,
             requests_per_client=requests_per_client,
             track_per_connection=False,  # Disable for suite (enable manually if needed)
         )
@@ -193,9 +193,9 @@ class BenchmarkSuite:
 
     def _run_http_benchmarks(
         self,
-        num_connections,
+        num_serial_connections,
         num_requests,
-        num_concurrent_clients,
+        num_parallel_clients,
         requests_per_client,
         test_binary_transfer,
         binary_file_sizes,
@@ -205,13 +205,13 @@ class BenchmarkSuite:
         """Run all benchmarks for HTTP"""
 
         # Connection Benchmark
-        print(f"  - Connection benchmark ({num_connections} connections)...")
+        print(f"  - Connection benchmark ({num_serial_connections} serial connections)...")
         conn_bench = ConnectionBenchmark(
             name="HTTP Connection",
             protocol="http",
             server_mode="threaded",
             connection_factory=lambda: create_http_session(),
-            num_connections=num_connections,
+            num_connections=num_serial_connections,
         )
         metrics = conn_bench.execute()
         self.results.add_result(metrics)
@@ -270,14 +270,14 @@ class BenchmarkSuite:
             self.results.add_result(metrics)
 
         # Concurrent Benchmark
-        print(f"  - Concurrent benchmark ({num_concurrent_clients} clients)...")
+        print(f"  - Concurrent benchmark ({num_parallel_clients} parallel clients)...")
         conc_bench = ConcurrentBenchmark(
             name="HTTP Concurrent",
             protocol="http",
             server_mode="threaded",
             connection_factory=lambda: create_http_session(),
             request_func=lambda session: session.get(f"{self.http_base_url}/ping"),
-            num_clients=num_concurrent_clients,
+            num_clients=num_parallel_clients,
             requests_per_client=requests_per_client,
             track_per_connection=False,  # Disable for suite (enable manually if needed)
         )

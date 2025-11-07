@@ -18,9 +18,9 @@ def main():
         test_rpyc_threaded=True,
         test_rpyc_forking=True,
         test_http=True,
-        num_connections=50,
+        num_serial_connections=50,
         num_requests=500,
-        num_concurrent_clients=5,
+        num_parallel_clients=5,
         requests_per_client=50,
     )
 
