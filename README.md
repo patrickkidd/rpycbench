@@ -26,12 +26,13 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
 
 ## Features & Architecture
 
-rpycbench measures RPyC vs HTTP/REST performance across four dimensions:
+rpycbench measures RPyC vs HTTP/REST performance across five dimensions:
 
 1. **Connection Time**: Initial handshake and connection establishment
 2. **Latency**: Round-trip time for request/response pairs (with percentile analysis)
 3. **Bandwidth**: Data transfer rates for various payload sizes
-4. **Concurrency**: Performance under load with multiple simultaneous connections
+4. **Binary File Transfer**: Large file transfers with configurable sizes and chunk sizes
+5. **Concurrency**: Performance under load with multiple simultaneous connections
 
 **What's Being Measured**:
 - RPyC uses binary protocol over raw sockets with Python object serialization
@@ -213,6 +214,31 @@ rpyc_bw = data['rpyc_threaded']['download_bandwidth']['mean']
 http_bw = data['http_threaded']['download_bandwidth']['mean']
 ```
 
+### Binary File Transfer Benchmark
+
+Test large file transfers with configurable sizes and chunk size:
+
+```bash
+# Run complete binary transfer benchmark (default: 64KB chunks)
+python examples/binary_transfer.py
+
+# Quick test with smaller files
+python examples/binary_transfer.py --quick
+
+# Context manager integration example
+python examples/binary_transfer.py --custom
+
+# Or via CLI with default 64KB chunks
+rpycbench --test-binary-transfer
+
+# Compare different chunk sizes by running multiple times
+rpycbench --test-binary-transfer --binary-chunk-size 8192    # 8KB chunks
+rpycbench --test-binary-transfer --binary-chunk-size 524288  # 512KB chunks
+
+# Custom file sizes with 16KB chunks
+rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760 --binary-chunk-size 16384
+```
+
 ### Using as Context Managers
 
 Integrate benchmarks into your application:
@@ -384,6 +410,16 @@ Benchmark Parameters:
   --num-requests N          Number of requests (default: 1000)
   --num-concurrent-clients N Number of concurrent clients (default: 10)
   --requests-per-client N   Requests per client (default: 100)
+
+Binary Transfer Benchmark:
+  --test-binary-transfer    Enable binary file transfer benchmarks
+  --binary-file-sizes SIZE [SIZE ...]
+                            File sizes in bytes (default: 1572864 134217728 524288000)
+                            Example: --binary-file-sizes 1048576 10485760
+  --binary-chunk-size SIZE  Chunk size in bytes for chunked transfers (default: 65536)
+                            Example: --binary-chunk-size 8192
+                            Run multiple times with different values to compare impact
+  --binary-iterations N     Number of iterations per test (default: 3)
 
 Output Options:
   --output FILE, -o FILE    Save JSON results to file
@@ -670,7 +706,91 @@ Measures data transfer rates for various payload sizes (1KB - 1MB):
 - Upload bandwidth
 - Download bandwidth
 
-### 4. Concurrent Benchmark
+### 4. Binary File Transfer Benchmark
+Measures large file transfer performance with configurable file sizes and chunk size:
+- Default file sizes: 1.5MB, 128MB, 500MB (configurable)
+- Single chunk size per run (default: 64KB, configurable)
+- Tests both chunked and non-chunked transfers
+- Useful for understanding latency vs bandwidth tradeoffs
+- Run multiple times with different chunk sizes to compare impact
+- Tracks throughput (Mbps) for each file size
+
+**Example Usage:**
+
+```python
+from rpycbench.benchmarks.suite import BenchmarkSuite
+
+suite = BenchmarkSuite()
+
+# Run with 64KB chunks (default)
+results = suite.run_all(
+    test_binary_transfer=True,
+    binary_file_sizes=[1_572_864, 134_217_728],  # 1.5MB, 128MB
+    binary_chunk_size=65_536,  # 64KB
+    binary_iterations=3,
+)
+
+# Compare with different chunk size
+results2 = suite.run_all(
+    test_binary_transfer=True,
+    binary_file_sizes=[1_572_864, 134_217_728],
+    binary_chunk_size=524_288,  # 512KB - see how it compares!
+    binary_iterations=3,
+)
+```
+
+Or programmatically:
+
+```python
+from rpycbench.core.benchmark import BinaryTransferBenchmark
+from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
+
+with RPyCServer(host='localhost', port=18812, mode='threaded'):
+    bench = BinaryTransferBenchmark(
+        name="Large File Transfer",
+        protocol="rpyc",
+        server_mode="threaded",
+        connection_factory=lambda: create_rpyc_connection('localhost', 18812),
+        upload_func=lambda conn, data: conn.root.upload_file(data),
+        download_func=lambda conn, size: conn.root.download_file(size),
+        upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
+        download_chunked_func=lambda conn, size, chunk_size: conn.root.download_file_chunked(size, chunk_size),
+        file_sizes=[1_572_864, 134_217_728, 524_288_000],  # 1.5MB, 128MB, 500MB
+        chunk_size=65_536,  # 64KB
+        iterations=3,
+    )
+
+    metrics = bench.execute()
+
+    # Access detailed results
+    for result in metrics.metadata['transfer_results']:
+        chunk_info = f", chunk={result['chunk_size_kb']:.0f}KB" if result['chunk_size'] else ""
+        print(f"{result['type']}: {result['file_size_mb']:.1f}MB{chunk_info} @ {result['throughput_mbps']:.2f} Mbps")
+```
+
+Or with context manager for integration:
+
+```python
+from rpycbench.core.benchmark import BenchmarkContext
+from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
+
+with RPyCServer(host='localhost', port=18812, mode='threaded'):
+    with BenchmarkContext("My App", "rpyc", measure_bandwidth=True) as ctx:
+        conn = create_rpyc_connection('localhost', 18812)
+
+        # Your application code
+        for file_data in my_files:
+            with ctx.measure_request(bytes_sent=len(file_data)):
+                conn.root.upload_file(file_data)
+                ctx.record_request(success=True)
+
+        conn.close()
+
+    stats = ctx.get_results().compute_statistics()
+    print(f"Upload bandwidth: {stats['upload_bandwidth']['mean'] / (1024*1024):.2f} MB/s")
+```
+
+### 5. Concurrent Benchmark
 Measures performance with multiple simultaneous clients:
 - Connection establishment under load
 - Request throughput
@@ -838,6 +958,7 @@ See the `examples/` directory for complete examples:
 
 **Benchmarking:**
 - `baseline_comparison.py` - Quick baseline comparison of RPyC vs HTTP
+- `binary_transfer.py` - Large file transfer benchmarks with configurable sizes and chunk sizes
 - `high_concurrency_128.py` - 128 parallel connections with per-connection metrics
 - `autonomous_run.py` - Running full benchmark suite autonomously
 - `context_manager_basic.py` - Basic context manager usage

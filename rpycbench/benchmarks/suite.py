@@ -4,6 +4,7 @@ from rpycbench.core.benchmark import (
     ConnectionBenchmark,
     LatencyBenchmark,
     BandwidthBenchmark,
+    BinaryTransferBenchmark,
     ConcurrentBenchmark,
 )
 from rpycbench.core.metrics import BenchmarkResults
@@ -40,6 +41,10 @@ class BenchmarkSuite:
         num_requests=1000,
         num_concurrent_clients=10,
         requests_per_client=100,
+        test_binary_transfer=False,
+        binary_file_sizes=None,
+        binary_chunk_size=None,
+        binary_iterations=3,
     ):
         """Run all benchmarks"""
 
@@ -55,7 +60,11 @@ class BenchmarkSuite:
                     num_connections,
                     num_requests,
                     num_concurrent_clients,
-                    requests_per_client
+                    requests_per_client,
+                    test_binary_transfer,
+                    binary_file_sizes,
+                    binary_chunk_size,
+                    binary_iterations,
                 )
 
         # Test RPyC Forking Server
@@ -67,7 +76,11 @@ class BenchmarkSuite:
                     num_connections,
                     num_requests,
                     num_concurrent_clients,
-                    requests_per_client
+                    requests_per_client,
+                    test_binary_transfer,
+                    binary_file_sizes,
+                    binary_chunk_size,
+                    binary_iterations,
                 )
 
         # Test HTTP Server
@@ -78,7 +91,11 @@ class BenchmarkSuite:
                     num_connections,
                     num_requests,
                     num_concurrent_clients,
-                    requests_per_client
+                    requests_per_client,
+                    test_binary_transfer,
+                    binary_file_sizes,
+                    binary_chunk_size,
+                    binary_iterations,
                 )
 
         print("\n" + "=" * 80)
@@ -92,7 +109,11 @@ class BenchmarkSuite:
         num_connections,
         num_requests,
         num_concurrent_clients,
-        requests_per_client
+        requests_per_client,
+        test_binary_transfer,
+        binary_file_sizes,
+        binary_chunk_size,
+        binary_iterations,
     ):
         """Run all benchmarks for RPyC"""
 
@@ -136,6 +157,25 @@ class BenchmarkSuite:
         metrics = bw_bench.execute()
         self.results.add_result(metrics)
 
+        # Binary Transfer Benchmark
+        if test_binary_transfer:
+            print(f"  - Binary transfer benchmark...")
+            bin_bench = BinaryTransferBenchmark(
+                name=f"RPyC Binary Transfer ({server_mode})",
+                protocol="rpyc",
+                server_mode=server_mode,
+                connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+                upload_func=lambda conn, data: conn.root.upload_file(data),
+                download_func=lambda conn, size: conn.root.download_file(size),
+                upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
+                download_chunked_func=lambda conn, size, chunk_size: conn.root.download_file_chunked(size, chunk_size),
+                file_sizes=binary_file_sizes,
+                chunk_size=binary_chunk_size,
+                iterations=binary_iterations,
+            )
+            metrics = bin_bench.execute()
+            self.results.add_result(metrics)
+
         # Concurrent Benchmark
         print(f"  - Concurrent benchmark ({num_concurrent_clients} clients)...")
         conc_bench = ConcurrentBenchmark(
@@ -156,7 +196,11 @@ class BenchmarkSuite:
         num_connections,
         num_requests,
         num_concurrent_clients,
-        requests_per_client
+        requests_per_client,
+        test_binary_transfer,
+        binary_file_sizes,
+        binary_chunk_size,
+        binary_iterations,
     ):
         """Run all benchmarks for HTTP"""
 
@@ -199,6 +243,31 @@ class BenchmarkSuite:
         )
         metrics = bw_bench.execute()
         self.results.add_result(metrics)
+
+        # Binary Transfer Benchmark
+        if test_binary_transfer:
+            print(f"  - Binary transfer benchmark...")
+            bin_bench = BinaryTransferBenchmark(
+                name="HTTP Binary Transfer",
+                protocol="http",
+                server_mode="threaded",
+                connection_factory=lambda: create_http_session(),
+                upload_func=lambda session, data: session.post(f"{self.http_base_url}/upload-file", data=data),
+                download_func=lambda session, size: session.get(f"{self.http_base_url}/download-file/{size}").content,
+                upload_chunked_func=lambda session, chunks: session.post(
+                    f"{self.http_base_url}/upload-file-chunked",
+                    json={'chunks': [chunk.hex() for chunk in chunks]}
+                ),
+                download_chunked_func=lambda session, size, chunk_size: [
+                    bytes.fromhex(chunk) for chunk in
+                    session.get(f"{self.http_base_url}/download-file-chunked/{size}/{chunk_size}").json()['chunks']
+                ],
+                file_sizes=binary_file_sizes,
+                chunk_size=binary_chunk_size,
+                iterations=binary_iterations,
+            )
+            metrics = bin_bench.execute()
+            self.results.add_result(metrics)
 
         # Concurrent Benchmark
         print(f"  - Concurrent benchmark ({num_concurrent_clients} clients)...")

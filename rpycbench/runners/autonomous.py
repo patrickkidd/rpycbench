@@ -83,6 +83,32 @@ def main():
         help='Number of requests per concurrent client'
     )
 
+    # Binary transfer benchmark
+    parser.add_argument(
+        '--test-binary-transfer',
+        action='store_true',
+        help='Enable binary file transfer benchmarks'
+    )
+    parser.add_argument(
+        '--binary-file-sizes',
+        type=int,
+        nargs='+',
+        default=None,
+        help='File sizes in bytes (default: 1572864 134217728 524288000)'
+    )
+    parser.add_argument(
+        '--binary-chunk-size',
+        type=int,
+        default=None,
+        help='Chunk size in bytes for chunked transfers (default: 65536)'
+    )
+    parser.add_argument(
+        '--binary-iterations',
+        type=int,
+        default=3,
+        help='Number of iterations per binary transfer test'
+    )
+
     # Output options
     parser.add_argument(
         '--output',
@@ -115,6 +141,10 @@ def main():
             num_requests=args.num_requests,
             num_concurrent_clients=args.num_concurrent_clients,
             requests_per_client=args.requests_per_client,
+            test_binary_transfer=args.test_binary_transfer,
+            binary_file_sizes=args.binary_file_sizes,
+            binary_chunk_size=args.binary_chunk_size,
+            binary_iterations=args.binary_iterations,
         )
 
         # Print summary

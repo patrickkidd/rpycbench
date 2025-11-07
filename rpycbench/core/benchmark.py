@@ -297,6 +297,206 @@ class BandwidthBenchmark(BenchmarkBase):
                 pass
 
 
+class BinaryTransferBenchmark(BenchmarkBase):
+    """
+    Benchmark for measuring large binary file transfers.
+
+    Tests file transfer performance across different file sizes and chunk sizes,
+    useful for understanding the impact of latency vs bandwidth.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        protocol: str,
+        server_mode: Optional[str],
+        connection_factory: Callable[[], Any],
+        upload_func: Callable[[Any, bytes], Any],
+        download_func: Callable[[Any, int], bytes],
+        upload_chunked_func: Optional[Callable[[Any, List[bytes]], Any]] = None,
+        download_chunked_func: Optional[Callable[[Any, int, int], List[bytes]]] = None,
+        file_sizes: List[int] = None,
+        chunk_size: Optional[int] = None,
+        iterations: int = 3,
+        test_upload: bool = True,
+        test_download: bool = True,
+        test_chunked: bool = True,
+    ):
+        super().__init__(name, protocol, server_mode)
+        self.connection_factory = connection_factory
+        self.upload_func = upload_func
+        self.download_func = download_func
+        self.upload_chunked_func = upload_chunked_func
+        self.download_chunked_func = download_chunked_func
+
+        self.file_sizes = file_sizes or [
+            1_572_864,    # 1.5 MB
+            134_217_728,  # 128 MB
+            524_288_000,  # 500 MB
+        ]
+
+        self.chunk_size = chunk_size or 65_536  # 64 KB default
+
+        self.iterations = iterations
+        self.test_upload = test_upload
+        self.test_download = test_download
+        self.test_chunked = test_chunked
+        self.connection = None
+
+        self.metrics.metadata['file_sizes'] = self.file_sizes
+        self.metrics.metadata['chunk_size'] = self.chunk_size
+        self.metrics.metadata['transfer_results'] = []
+
+    def setup(self):
+        """Setup connection"""
+        self.connection = self.connection_factory()
+
+    def _generate_file(self, size: int) -> bytes:
+        """Generate binary file data of specified size"""
+        return b'\x00' * size
+
+    def _chunk_data(self, data: bytes, chunk_size: int) -> List[bytes]:
+        """Split data into chunks"""
+        chunks = []
+        offset = 0
+        while offset < len(data):
+            chunks.append(data[offset:offset + chunk_size])
+            offset += chunk_size
+        return chunks
+
+    def run(self):
+        """Run binary transfer benchmark"""
+        chunk_kb = self.chunk_size / 1024
+
+        for file_size in self.file_sizes:
+            file_data = self._generate_file(file_size)
+            size_mb = file_size / (1024 * 1024)
+
+            # Test non-chunked upload
+            if self.test_upload:
+                print(f"  Testing upload: {size_mb:.1f} MB...")
+                for i in range(self.iterations):
+                    start = time.time()
+                    try:
+                        self.upload_func(self.connection, file_data)
+                        duration = time.time() - start
+                        self.metrics.add_upload_bandwidth(file_size, duration)
+
+                        result = {
+                            'type': 'upload',
+                            'file_size': file_size,
+                            'file_size_mb': size_mb,
+                            'chunk_size': None,
+                            'duration': duration,
+                            'throughput_mbps': (file_size / duration) / (1024 * 1024) * 8,
+                            'iteration': i + 1,
+                        }
+                        self.metrics.metadata['transfer_results'].append(result)
+                    except Exception as e:
+                        self.metrics.metadata['errors'] = self.metrics.metadata.get('errors', [])
+                        self.metrics.metadata['errors'].append(
+                            f"Upload error ({size_mb:.1f}MB): {str(e)}"
+                        )
+
+            # Test non-chunked download
+            if self.test_download:
+                print(f"  Testing download: {size_mb:.1f} MB...")
+                for i in range(self.iterations):
+                    start = time.time()
+                    try:
+                        received = self.download_func(self.connection, file_size)
+                        duration = time.time() - start
+                        actual_size = len(received) if received else file_size
+                        self.metrics.add_download_bandwidth(actual_size, duration)
+
+                        result = {
+                            'type': 'download',
+                            'file_size': file_size,
+                            'file_size_mb': size_mb,
+                            'chunk_size': None,
+                            'duration': duration,
+                            'throughput_mbps': (actual_size / duration) / (1024 * 1024) * 8,
+                            'iteration': i + 1,
+                        }
+                        self.metrics.metadata['transfer_results'].append(result)
+                    except Exception as e:
+                        self.metrics.metadata['errors'] = self.metrics.metadata.get('errors', [])
+                        self.metrics.metadata['errors'].append(
+                            f"Download error ({size_mb:.1f}MB): {str(e)}"
+                        )
+
+            # Test chunked transfers with single chunk size
+            if self.test_chunked and self.upload_chunked_func and self.download_chunked_func:
+                # Chunked upload
+                if self.test_upload:
+                    print(f"  Testing chunked upload: {size_mb:.1f} MB, chunk={chunk_kb:.0f} KB...")
+                    chunks = self._chunk_data(file_data, self.chunk_size)
+
+                    for i in range(self.iterations):
+                        start = time.time()
+                        try:
+                            self.upload_chunked_func(self.connection, chunks)
+                            duration = time.time() - start
+                            self.metrics.add_upload_bandwidth(file_size, duration)
+
+                            result = {
+                                'type': 'upload_chunked',
+                                'file_size': file_size,
+                                'file_size_mb': size_mb,
+                                'chunk_size': self.chunk_size,
+                                'chunk_size_kb': chunk_kb,
+                                'num_chunks': len(chunks),
+                                'duration': duration,
+                                'throughput_mbps': (file_size / duration) / (1024 * 1024) * 8,
+                                'iteration': i + 1,
+                            }
+                            self.metrics.metadata['transfer_results'].append(result)
+                        except Exception as e:
+                            self.metrics.metadata['errors'] = self.metrics.metadata.get('errors', [])
+                            self.metrics.metadata['errors'].append(
+                                f"Chunked upload error ({size_mb:.1f}MB, {chunk_kb:.0f}KB): {str(e)}"
+                            )
+
+                # Chunked download
+                if self.test_download:
+                    print(f"  Testing chunked download: {size_mb:.1f} MB, chunk={chunk_kb:.0f} KB...")
+                    for i in range(self.iterations):
+                        start = time.time()
+                        try:
+                            chunks = self.download_chunked_func(
+                                self.connection, file_size, self.chunk_size
+                            )
+                            duration = time.time() - start
+                            actual_size = sum(len(chunk) for chunk in chunks) if chunks else file_size
+                            self.metrics.add_download_bandwidth(actual_size, duration)
+
+                            result = {
+                                'type': 'download_chunked',
+                                'file_size': file_size,
+                                'file_size_mb': size_mb,
+                                'chunk_size': self.chunk_size,
+                                'chunk_size_kb': chunk_kb,
+                                'num_chunks': len(chunks) if chunks else 0,
+                                'duration': duration,
+                                'throughput_mbps': (actual_size / duration) / (1024 * 1024) * 8,
+                                'iteration': i + 1,
+                            }
+                            self.metrics.metadata['transfer_results'].append(result)
+                        except Exception as e:
+                            self.metrics.metadata['errors'] = self.metrics.metadata.get('errors', [])
+                            self.metrics.metadata['errors'].append(
+                                f"Chunked download error ({size_mb:.1f}MB, {chunk_kb:.0f}KB): {str(e)}"
+                            )
+
+    def teardown(self):
+        """Cleanup connection"""
+        if self.connection and hasattr(self.connection, 'close'):
+            try:
+                self.connection.close()
+            except:
+                pass
+
+
 class ConcurrentBenchmark(BenchmarkBase):
     """
     Benchmark for measuring concurrent client performance.

@@ -60,6 +60,40 @@ def _run_http_server(host, port, threaded, ready_event):
             time.sleep(duration)
             return jsonify({'duration': duration})
 
+        @app.route('/upload-file', methods=['POST'])
+        def upload_file():
+            data = request.get_data()
+            return jsonify({'size': len(data)})
+
+        @app.route('/download-file/<int:size>', methods=['GET'])
+        def download_file(size):
+            data = b'\x00' * size
+            return send_file(
+                io.BytesIO(data),
+                mimetype='application/octet-stream',
+                as_attachment=True,
+                download_name='file.bin'
+            )
+
+        @app.route('/upload-file-chunked', methods=['POST'])
+        def upload_file_chunked():
+            import json
+            chunks_data = request.get_json()
+            chunks = [bytes.fromhex(chunk) for chunk in chunks_data['chunks']]
+            total_size = sum(len(chunk) for chunk in chunks)
+            return jsonify({'size': total_size})
+
+        @app.route('/download-file-chunked/<int:size>/<int:chunk_size>', methods=['GET'])
+        def download_file_chunked(size, chunk_size):
+            import json
+            chunks = []
+            remaining = size
+            while remaining > 0:
+                current_chunk = min(chunk_size, remaining)
+                chunks.append((b'\x00' * current_chunk).hex())
+                remaining -= current_chunk
+            return jsonify({'chunks': chunks})
+
         # Signal ready
         ready_event.set()
 

@@ -38,6 +38,25 @@ class BenchmarkService(rpyc.Service):
         time.sleep(duration)
         return duration
 
+    def exposed_upload_file(self, data):
+        return len(data)
+
+    def exposed_download_file(self, size):
+        return b'\x00' * size
+
+    def exposed_upload_file_chunked(self, chunks):
+        total_size = sum(len(chunk) for chunk in chunks)
+        return total_size
+
+    def exposed_download_file_chunked(self, size, chunk_size):
+        chunks = []
+        remaining = size
+        while remaining > 0:
+            current_chunk = min(chunk_size, remaining)
+            chunks.append(b'\x00' * current_chunk)
+            remaining -= current_chunk
+        return chunks
+
 
 def _run_rpyc_server(host, port, mode, ready_event):
     """

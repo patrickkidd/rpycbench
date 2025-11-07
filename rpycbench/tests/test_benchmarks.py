@@ -6,6 +6,7 @@ from rpycbench.core.benchmark import (
     ConnectionBenchmark,
     LatencyBenchmark,
     BandwidthBenchmark,
+    BinaryTransferBenchmark,
     ConcurrentBenchmark,
     BenchmarkContext,
 )
@@ -144,6 +145,104 @@ class TestBandwidthBenchmark:
 
             assert 'upload_bandwidth' in stats
             assert 'download_bandwidth' in stats
+
+
+class TestBinaryTransferBenchmark:
+    """Test binary file transfer benchmarking"""
+
+    def test_rpyc_binary_transfer(self, rpyc_port):
+        """Test RPyC binary file transfer"""
+        with RPyCServer(host='localhost', port=rpyc_port, mode='threaded'):
+            bench = BinaryTransferBenchmark(
+                name="Test Binary Transfer",
+                protocol="rpyc",
+                server_mode="threaded",
+                connection_factory=lambda: create_rpyc_connection('localhost', rpyc_port),
+                upload_func=lambda conn, data: conn.root.upload_file(data),
+                download_func=lambda conn, size: conn.root.download_file(size),
+                upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
+                download_chunked_func=lambda conn, size, chunk_size: conn.root.download_file_chunked(size, chunk_size),
+                file_sizes=[102_400, 1_048_576],
+                chunk_size=8_192,
+                iterations=2,
+                test_upload=True,
+                test_download=True,
+                test_chunked=True,
+            )
+
+            metrics = bench.execute()
+            stats = metrics.compute_statistics()
+
+            assert 'upload_bandwidth' in stats
+            assert 'download_bandwidth' in stats
+            assert stats['upload_bandwidth']['mean'] > 0
+            assert stats['download_bandwidth']['mean'] > 0
+            assert len(metrics.metadata['transfer_results']) > 0
+
+            upload_results = [r for r in metrics.metadata['transfer_results'] if 'upload' in r['type']]
+            download_results = [r for r in metrics.metadata['transfer_results'] if 'download' in r['type']]
+            assert len(upload_results) > 0
+            assert len(download_results) > 0
+
+    def test_http_binary_transfer(self, http_port):
+        """Test HTTP binary file transfer"""
+        with HTTPBenchmarkServer(host='localhost', port=http_port):
+            bench = BinaryTransferBenchmark(
+                name="Test Binary Transfer",
+                protocol="http",
+                server_mode="threaded",
+                connection_factory=lambda: create_http_session(),
+                upload_func=lambda session, data: session.post(f'http://localhost:{http_port}/upload-file', data=data),
+                download_func=lambda session, size: session.get(f'http://localhost:{http_port}/download-file/{size}').content,
+                upload_chunked_func=lambda session, chunks: session.post(
+                    f'http://localhost:{http_port}/upload-file-chunked',
+                    json={'chunks': [chunk.hex() for chunk in chunks]}
+                ),
+                download_chunked_func=lambda session, size, chunk_size: [
+                    bytes.fromhex(chunk) for chunk in
+                    session.get(f'http://localhost:{http_port}/download-file-chunked/{size}/{chunk_size}').json()['chunks']
+                ],
+                file_sizes=[102_400, 1_048_576],
+                chunk_size=8_192,
+                iterations=2,
+                test_upload=True,
+                test_download=True,
+                test_chunked=True,
+            )
+
+            metrics = bench.execute()
+            stats = metrics.compute_statistics()
+
+            assert 'upload_bandwidth' in stats
+            assert 'download_bandwidth' in stats
+            assert len(metrics.metadata['transfer_results']) > 0
+
+    def test_binary_transfer_no_chunked(self, rpyc_port):
+        """Test binary transfer without chunked mode"""
+        with RPyCServer(host='localhost', port=rpyc_port, mode='threaded'):
+            bench = BinaryTransferBenchmark(
+                name="Test Binary Transfer",
+                protocol="rpyc",
+                server_mode="threaded",
+                connection_factory=lambda: create_rpyc_connection('localhost', rpyc_port),
+                upload_func=lambda conn, data: conn.root.upload_file(data),
+                download_func=lambda conn, size: conn.root.download_file(size),
+                file_sizes=[102_400],
+                iterations=2,
+                test_upload=True,
+                test_download=True,
+                test_chunked=False,
+            )
+
+            metrics = bench.execute()
+
+            upload_results = [r for r in metrics.metadata['transfer_results'] if r['type'] == 'upload']
+            download_results = [r for r in metrics.metadata['transfer_results'] if r['type'] == 'download']
+            chunked_results = [r for r in metrics.metadata['transfer_results'] if 'chunked' in r['type']]
+
+            assert len(upload_results) == 2
+            assert len(download_results) == 2
+            assert len(chunked_results) == 0
 
 
 class TestBenchmarkContext:
