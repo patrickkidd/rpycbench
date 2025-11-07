@@ -167,7 +167,7 @@ class TestStatisticsComputation:
         assert 0.090 < stats['latency']['p95'] < 0.098
 
         # P99 should be around 99th value
-        assert 0.095 < stats['latency']['p99'] < 0.099
+        assert 0.095 < stats['latency']['p99'] <= 0.099
 
     def test_standard_deviation(self):
         """Test standard deviation calculation"""

@@ -142,9 +142,6 @@ class HTTPBenchmarkServer:
                 self.server_process.kill()
                 self.server_process.join()
 
-        self.server_process = None
-        self.ready_event = None
-
     def __enter__(self):
         """Context manager entry"""
         self.start()

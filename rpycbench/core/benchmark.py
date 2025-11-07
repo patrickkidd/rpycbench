@@ -4,7 +4,7 @@ import time
 import threading
 import multiprocessing
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Any, Dict
+from typing import Callable, Optional, Any, Dict, List
 from contextlib import contextmanager
 import concurrent.futures
 
@@ -443,4 +443,4 @@ class ConcurrentBenchmark(BenchmarkBase):
         """Get per-connection metrics if tracking is enabled"""
         if not self.track_per_connection:
             return []
-        return self.per_connection_metrics
+        return sorted(self.per_connection_metrics, key=lambda x: x['client_id'])

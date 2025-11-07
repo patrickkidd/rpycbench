@@ -171,7 +171,8 @@ class TestTelemetryStatistics:
 
             stats = telemetry.get_statistics()
             assert stats['avg_call_duration'] > 0
-            assert stats['total_calls'] == 20
+            # Each ping() call involves 2 operations: getattr('ping') + __call__()
+            assert stats['total_calls'] == 40
 
     def test_telemetry_reset(self, rpyc_port):
         """Test that telemetry can be reset"""
