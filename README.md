@@ -82,6 +82,64 @@ rpycbench --output results.json
 rpycbench --skip-rpyc-forking --skip-http
 ```
 
+### Baseline Comparison (RPyC vs HTTP)
+
+Compare baseline performance in a single run with comparable metrics:
+
+```bash
+# Run baseline comparison
+python examples/baseline_comparison.py
+
+# Quick baseline (faster, less accurate)
+python examples/baseline_comparison.py --quick
+```
+
+Or use the CLI:
+```bash
+# Compare RPyC threaded vs HTTP (skip forking for faster baseline)
+rpycbench --skip-rpyc-forking --output baseline.json
+```
+
+**Output Format**: All metrics are in the same format for easy comparison:
+
+```
+================================================================================
+BENCHMARK RESULTS SUMMARY
+================================================================================
+
+RPYC_THREADED
+----------------------------------------
+  Connection Time: 1.23ms (±0.45ms)
+  Latency Mean: 2.34ms (±0.67ms)
+  Latency P95: 3.56ms
+  Upload Bandwidth: 45.67 MB/s
+  Download Bandwidth: 67.89 MB/s
+
+HTTP_THREADED
+----------------------------------------
+  Connection Time: 2.45ms (±0.78ms)
+  Latency Mean: 3.21ms (±0.89ms)
+  Latency P95: 4.12ms
+  Upload Bandwidth: 38.45 MB/s
+  Download Bandwidth: 52.31 MB/s
+```
+
+**JSON Export** for programmatic comparison:
+```python
+import json
+data = json.load(open('baseline.json'))
+
+# Compare latencies
+rpyc_lat = data['rpyc_threaded']['latency']['mean']
+http_lat = data['http_threaded']['latency']['mean']
+speedup = http_lat / rpyc_lat
+print(f"RPyC is {speedup:.2f}x faster")
+
+# Compare bandwidth
+rpyc_bw = data['rpyc_threaded']['download_bandwidth']['mean']
+http_bw = data['http_threaded']['download_bandwidth']['mean']
+```
+
 ### Using as Context Managers
 
 Integrate benchmarks into your application:
@@ -178,7 +236,34 @@ overhead = app_lat - baseline_lat
 print(f"App overhead: {overhead*1000:.2f}ms")
 ```
 
-### Example 3: Custom Benchmarks
+### Example 3: Baseline Comparison
+
+Run a quick baseline comparison:
+
+```python
+from rpycbench.benchmarks.suite import BenchmarkSuite
+
+suite = BenchmarkSuite()
+
+# Compare RPyC vs HTTP
+results = suite.run_all(
+    test_rpyc_threaded=True,
+    test_rpyc_forking=False,  # Skip for faster baseline
+    test_http=True,
+    num_connections=100,
+    num_requests=1000,
+)
+
+# Print formatted comparison
+results.print_summary()
+
+# Export for analysis
+data = results.to_dict()
+print(f"RPyC latency: {data['rpyc_threaded']['latency']['mean']*1000:.2f}ms")
+print(f"HTTP latency: {data['http_threaded']['latency']['mean']*1000:.2f}ms")
+```
+
+### Example 4: Custom Benchmarks
 
 Create custom benchmarks for specific scenarios:
 
@@ -413,6 +498,62 @@ See the `examples/` directory for complete profiling examples:
 - `profiling_advanced.py` - Advanced features and visualization
 - `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
 
+## How It Works: Threading Model & Isolation
+
+### Server Execution Model
+
+**Important**: All benchmark servers run in the **same process** as the benchmark code, but in separate background daemon threads. This means:
+
+1. **Server Lifecycle**:
+   - Servers are started in a background thread before each test
+   - Tests run against the server
+   - Servers are stopped after the test completes
+   - Each server type is tested **sequentially** (one at a time)
+
+2. **Thread vs Process Handling**:
+   - **RPyC ThreadedServer**: Server runs in thread, creates NEW THREAD per client connection
+   - **RPyC ForkingServer**: Server runs in thread, FORKS NEW PROCESS per client connection
+   - **HTTP ThreadedServer**: Flask server runs in thread, handles requests in threads (when `threaded=True`)
+
+3. **Isolation**:
+   - ✅ Tests are isolated from each other (sequential execution)
+   - ✅ Each server gets a clean start/stop cycle
+   - ⚠️ Server and benchmark code share the same process (GIL may affect Python-heavy workloads)
+   - ⚠️ System resources (CPU, memory) are shared
+
+4. **What This Means for Your Benchmarks**:
+   - Results reflect real-world performance on the same hardware
+   - CPU/memory metrics include both server and client overhead
+   - For production comparison, consider running servers in separate processes
+   - The benchmark suite prioritizes ease of use over strict isolation
+
+### Port Usage
+
+- RPyC servers use port 18812 by default (configurable)
+- HTTP servers use port 5000 by default (configurable)
+- Ports are reused between tests (servers are stopped between runs)
+
+### Code Execution Flow
+
+```
+1. Start RPyC Threaded Server (background thread)
+   └─> Run Connection Benchmark
+   └─> Run Latency Benchmark
+   └─> Run Bandwidth Benchmark
+   └─> Run Concurrent Benchmark
+2. Stop RPyC Threaded Server
+
+3. Start RPyC Forking Server (background thread)
+   └─> Run all benchmarks...
+4. Stop RPyC Forking Server
+
+5. Start HTTP Server (background thread)
+   └─> Run all benchmarks...
+6. Stop HTTP Server
+
+7. Compare results
+```
+
 ## Architecture
 
 ```
@@ -428,7 +569,9 @@ rpycbench/
 ├── runners/
 │   └── autonomous.py     # Autonomous runner (CLI)
 └── utils/
-    └── ...               # Utility functions
+    ├── telemetry.py      # RPyC telemetry tracking
+    ├── profiler.py       # Connection profiling
+    └── visualizer.py     # Telemetry visualization
 ```
 
 ## Benchmark Types
@@ -573,7 +716,16 @@ See LICENSE file for details.
 
 ## Examples
 
-See the `examples/` directory for more usage examples:
-- `autonomous_run.py` - Running benchmarks autonomously
+See the `examples/` directory for complete examples:
+
+**Benchmarking:**
+- `baseline_comparison.py` - Quick baseline comparison of RPyC vs HTTP
+- `autonomous_run.py` - Running full benchmark suite autonomously
 - `context_manager_basic.py` - Basic context manager usage
 - `context_manager_app_integration.py` - Integration with application code
+- `quick_test.py` - Quick verification test
+
+**Profiling:**
+- `profiling_basic.py` - Basic RPyC profiling
+- `profiling_advanced.py` - Advanced profiling with visualization
+- `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
