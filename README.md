@@ -16,6 +16,8 @@ curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-l
 
 This automatically fetches and installs the latest wheel from GitHub releases - no version string needed!
 
+**How it works**: The script queries the GitHub API for the latest release, extracts the wheel URL, and runs `pip install --upgrade --force-reinstall` on it. This ensures you always get the most recent build without manually tracking version numbers.
+
 ## Features
 
 - **Comprehensive Metrics**
@@ -64,6 +66,16 @@ pip install --upgrade --force-reinstall https://github.com/patrickkidd/rpycbench
 ```
 
 Browse all releases: https://github.com/patrickkidd/rpycbench/releases
+
+### Direct Install from Master Branch
+
+Install directly from the latest wheel built from master (bypasses releases):
+
+```bash
+pip install --upgrade https://github.com/patrickkidd/rpycbench/raw/master/dist/rpycbench-0.1.0-py3-none-any.whl
+```
+
+Note: This requires the wheel to be committed to the repository. Use the release-based install above for automatic updates.
 
 ### From Source
 
@@ -252,6 +264,28 @@ app_lat = app_metrics.compute_statistics()['latency']['mean']
 overhead = app_lat - baseline_lat
 print(f"App overhead: {overhead*1000:.2f}ms")
 ```
+
+## Architecture Overview
+
+rpycbench measures RPyC vs HTTP/REST performance across four dimensions:
+
+1. **Connection Time**: Initial handshake and connection establishment
+2. **Latency**: Round-trip time for request/response pairs (with percentile analysis)
+3. **Bandwidth**: Data transfer rates for various payload sizes
+4. **Concurrency**: Performance under load with multiple simultaneous connections
+
+**Key Design**:
+- **Separate Processes**: Servers run in isolated processes to eliminate GIL interference
+- **Multiple Server Modes**: RPyC threaded/forking vs HTTP threaded
+- **High Concurrency**: Default 128 parallel client connections from single process
+- **Context Managers**: Embed benchmarks directly into application code
+- **Profiling**: Track RPyC network round trips, netref usage, and call patterns
+
+**What's Being Measured**:
+- RPyC uses binary protocol over raw sockets with Python object serialization
+- HTTP uses JSON over REST with request/response overhead
+- Tests measure both baseline protocol performance and real-world usage patterns
+- Profiler identifies bottlenecks like excessive round trips and netref overhead
 
 ### Example 3: Baseline Comparison
 
