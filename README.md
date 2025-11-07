@@ -7,29 +7,26 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
 - [Features & Architecture](#features--architecture)
 - [Quick Install](#quick-install)
 - [Installation Options](#installation-options)
-- [Quick Start](#quick-start)
-  - [Autonomous Mode](#autonomous-mode)
-  - [Baseline Comparison](#baseline-comparison-rpyc-vs-http)
-  - [Using as Context Managers](#using-as-context-managers)
-- [Usage Examples](#usage-examples)
-- [Command Line Options](#command-line-options)
-- [RPyC Profiling & Telemetry](#rpyc-profiling--telemetry)
-- [How It Works: Threading Model & Isolation](#how-it-works-threading-model--isolation)
-- [Benchmark Types](#benchmark-types)
-- [Output Format](#output-format)
-- [Architecture (Directory Structure)](#architecture)
-- [Extending the Suite](#extending-the-suite)
-- [Requirements](#requirements)
+- [Command-Line Usage](#command-line-usage) - Testing RPyC vs HTTP/Flask generically
+  - [Quick Start Examples](#quick-start-examples)
+  - [Cookbook: Common Scenarios](#cookbook-common-scenarios)
+  - [Command Reference](#command-reference)
+- [Python API for Existing Apps](#python-api-for-existing-apps) - Integrating benchmarks into your application
+  - [Basic Integration](#basic-integration)
+  - [Synthetic App Example](#synthetic-app-example)
+  - [Measuring Application Overhead](#measuring-application-overhead)
+  - [Context Manager Patterns](#context-manager-patterns)
+  - [RPyC Profiling & Telemetry](#rpyc-profiling--telemetry)
+- [How It Works](#how-it-works)
+- [Architecture](#architecture)
 - [Contributing](#contributing)
-- [License](#license)
-- [Examples](#examples)
 
 ## Features & Architecture
 
 rpycbench measures RPyC vs HTTP/REST performance across five dimensions:
 
 1. **Connection Time**: Initial handshake and connection establishment
-2. **Latency**: Round-trip time for request/response pairs (with percentile analysis)
+2. **Latency**: Round-trip time for request/response pairs (mean, median, P95, P99)
 3. **Bandwidth**: Data transfer rates for various payload sizes
 4. **Binary File Transfer**: Large file transfers with configurable sizes and chunk sizes
 5. **Concurrency**: Performance under load with multiple simultaneous connections
@@ -41,42 +38,11 @@ rpycbench measures RPyC vs HTTP/REST performance across five dimensions:
 - Profiler identifies bottlenecks like excessive round trips and netref overhead
 
 **Key Capabilities**:
-
-- **Comprehensive Metrics**
-  - Connection establishment time
-  - Request/response latency (mean, median, P95, P99)
-  - Upload and download bandwidth
-  - System resource usage (CPU, memory)
-
-- **Multiple Server Modes**
-  - RPyC: Threaded server, Forking server
-  - HTTP: Flask-based threaded server
-
-- **High Concurrency Testing**
-  - Default: 128 parallel connections from single client
-  - Server runs in separate process (no GIL interference)
-  - Per-connection metrics tracking
-  - Compare server modes under load
-
-- **Flexible Usage**
-  - **Autonomous Mode**: Run complete benchmark suite standalone
-  - **Context Managers**: Integrate benchmarks into your application code
-  - Compare baseline performance vs. application overhead
-
-- **RPyC Profiling & Telemetry**
-  - Track network round trips in real-time
-  - Monitor netref creation and lifecycle
-  - Visualize call stacks and nesting depth
-  - Detect slow calls automatically
-  - ASCII call tree and timeline visualization
-  - Diagnose performance bottlenecks in your RPyC applications
-
-**Design Principles**:
-- **Separate Processes**: Servers run in isolated processes to eliminate GIL interference
-- **Multiple Server Modes**: RPyC threaded/forking vs HTTP threaded
-- **High Concurrency**: Default 128 parallel client connections from single process
-- **Context Managers**: Embed benchmarks directly into application code
-- **Profiling**: Track RPyC network round trips, netref usage, and call patterns
+- Comprehensive metrics: connection time, latency (P95/P99), bandwidth, system resources
+- Multiple server modes: RPyC threaded/forking, HTTP threaded
+- High concurrency testing: 128+ parallel connections with per-connection tracking
+- Two usage modes: CLI for generic testing, Python API for application integration
+- Built-in profiling: track RPyC round trips, netrefs, and call patterns
 
 ## Quick Install
 
@@ -92,15 +58,9 @@ curl -sSL https://raw.githubusercontent.com/patrickkidd/rpycbench/main/install-l
 
 This automatically fetches and installs the latest wheel from GitHub releases - no version string needed!
 
-**How it works**: The script queries the GitHub API for the latest release, extracts the wheel URL, and runs `pip install --upgrade --force-reinstall` on it. This ensures you always get the most recent build without manually tracking version numbers.
-
 ## Installation Options
 
-The quick install above is recommended, but here are other options:
-
 ### Manual Installation from GitHub Releases
-
-Every push to master automatically builds a wheel. Install a specific version:
 
 ```bash
 # Install specific version
@@ -112,136 +72,331 @@ pip install --upgrade --force-reinstall https://github.com/patrickkidd/rpycbench
 
 Browse all releases: https://github.com/patrickkidd/rpycbench/releases
 
-### Direct Install from Master Branch
-
-Install directly from the latest wheel built from master (bypasses releases):
-
-```bash
-pip install --upgrade https://github.com/patrickkidd/rpycbench/raw/master/dist/rpycbench-0.1.0-py3-none-any.whl
-```
-
-Note: This requires the wheel to be committed to the repository. Use the release-based install above for automatic updates.
-
 ### From Source
 
 ```bash
-# Clone repository
 git clone https://github.com/patrickkidd/rpycbench.git
 cd rpycbench
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install package
 pip install -e .
 ```
 
-## Quick Start
+---
 
-### Autonomous Mode
+# Command-Line Usage
 
-Run the complete benchmark suite:
+**Purpose**: Test RPyC vs HTTP/Flask performance generically without writing code.
+
+The command-line tool runs benchmarks comparing RPyC and HTTP servers across different scenarios. Use this to understand baseline performance characteristics before integrating into your application.
+
+## Quick Start Examples
+
+### Basic Comparison
 
 ```bash
 # Run all benchmarks with default settings
 rpycbench
 
-# Customize parameters
-rpycbench --num-connections 200 --num-requests 2000 --num-concurrent-clients 20
+# Quick baseline (skip forking server for speed)
+rpycbench --skip-rpyc-forking
 
 # Save results to JSON
 rpycbench --output results.json
-
-# Skip specific tests
-rpycbench --skip-rpyc-forking --skip-http
 ```
 
-### Baseline Comparison (RPyC vs HTTP)
-
-Compare baseline performance in a single run with comparable metrics:
+### Focused Testing
 
 ```bash
-# Run baseline comparison
-python examples/baseline_comparison.py
+# Test only latency
+rpycbench --num-connections 10 --num-requests 5000
 
-# Quick baseline (faster, less accurate)
-python examples/baseline_comparison.py --quick
+# Test only concurrency
+rpycbench --num-concurrent-clients 50 --requests-per-client 200
+
+# Test only binary transfers
+rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760
 ```
 
-Or use the CLI:
-```bash
-# Compare RPyC threaded vs HTTP (skip forking for faster baseline)
-rpycbench --skip-rpyc-forking --output baseline.json
-```
+## Cookbook: Common Scenarios
 
-**Output Format**: All metrics are in the same format for easy comparison:
+### Scenario 1: Quick Health Check
 
-```
-================================================================================
-BENCHMARK RESULTS SUMMARY
-================================================================================
-
-RPYC_THREADED
-----------------------------------------
-  Connection Time: 1.23ms (±0.45ms)
-  Latency Mean: 2.34ms (±0.67ms)
-  Latency P95: 3.56ms
-  Upload Bandwidth: 45.67 MB/s
-  Download Bandwidth: 67.89 MB/s
-
-HTTP_THREADED
-----------------------------------------
-  Connection Time: 2.45ms (±0.78ms)
-  Latency Mean: 3.21ms (±0.89ms)
-  Latency P95: 4.12ms
-  Upload Bandwidth: 38.45 MB/s
-  Download Bandwidth: 52.31 MB/s
-```
-
-**JSON Export** for programmatic comparison:
-```python
-import json
-data = json.load(open('baseline.json'))
-
-# Compare latencies
-rpyc_lat = data['rpyc_threaded']['latency']['mean']
-http_lat = data['http_threaded']['latency']['mean']
-speedup = http_lat / rpyc_lat
-print(f"RPyC is {speedup:.2f}x faster")
-
-# Compare bandwidth
-rpyc_bw = data['rpyc_threaded']['download_bandwidth']['mean']
-http_bw = data['http_threaded']['download_bandwidth']['mean']
-```
-
-### Binary File Transfer Benchmark
-
-Test large file transfers with configurable sizes and chunk size:
+**Goal**: Verify RPyC and HTTP are working correctly
 
 ```bash
-# Run complete binary transfer benchmark (default: 64KB chunks)
-python examples/binary_transfer.py
+rpycbench \
+  --skip-rpyc-forking \
+  --num-connections 10 \
+  --num-requests 100 \
+  --num-concurrent-clients 5
+```
 
-# Quick test with smaller files
-python examples/binary_transfer.py --quick
+**What it tests**: Basic connectivity, latency, and light concurrency
+**Time**: ~10 seconds
 
-# Context manager integration example
-python examples/binary_transfer.py --custom
+---
 
-# Or via CLI with default 64KB chunks
+### Scenario 2: Detailed Latency Analysis
+
+**Goal**: Understand request/response latency characteristics
+
+```bash
+rpycbench \
+  --num-requests 10000 \
+  --num-connections 1 \
+  --num-concurrent-clients 1
+```
+
+**What it tests**: P50, P95, P99 latency with large sample size
+**Time**: ~30 seconds
+**Output**: Detailed percentile breakdown
+
+---
+
+### Scenario 3: High Concurrency Load Test
+
+**Goal**: Test performance under heavy concurrent load
+
+```bash
+rpycbench \
+  --num-concurrent-clients 128 \
+  --requests-per-client 500 \
+  --skip-rpyc-forking
+```
+
+**What it tests**: 128 parallel connections making 500 requests each
+**Time**: ~1-2 minutes
+**Watch for**: Success rate, connection failures, resource usage
+
+---
+
+### Scenario 4: Bandwidth Characterization
+
+**Goal**: Understand data transfer rates for different payload sizes
+
+```bash
+rpycbench \
+  --num-connections 10 \
+  --num-requests 100 \
+  --num-concurrent-clients 1
+```
+
+**What it tests**: Upload/download bandwidth for 1KB - 1MB payloads
+**Time**: ~20 seconds
+**Focus**: Bandwidth benchmark results
+
+---
+
+### Scenario 5: Large File Transfers
+
+**Goal**: Test large file transfer performance
+
+```bash
+# Test with default 64KB chunks
 rpycbench --test-binary-transfer
 
-# Compare different chunk sizes by running multiple times
-rpycbench --test-binary-transfer --binary-chunk-size 8192    # 8KB chunks
-rpycbench --test-binary-transfer --binary-chunk-size 524288  # 512KB chunks
+# Compare different chunk sizes
+rpycbench --test-binary-transfer --binary-chunk-size 8192
+rpycbench --test-binary-transfer --binary-chunk-size 524288
 
-# Custom file sizes with 16KB chunks
-rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760 --binary-chunk-size 16384
+# Custom file sizes
+rpycbench --test-binary-transfer \
+  --binary-file-sizes 5242880 52428800 \
+  --binary-chunk-size 65536 \
+  --binary-iterations 5
 ```
 
-### Using as Context Managers
+**What it tests**: Multi-MB file transfers with different chunking strategies
+**Time**: Varies by file size (can be 5-10 minutes for 500MB)
+**Insight**: Shows impact of chunk size on throughput
 
-Integrate benchmarks into your application:
+---
+
+### Scenario 6: Server Mode Comparison
+
+**Goal**: Compare threaded vs forking server performance
+
+```bash
+rpycbench \
+  --num-concurrent-clients 32 \
+  --requests-per-client 100
+```
+
+**What it tests**: Both threaded and forking RPyC servers under load
+**Time**: ~1 minute
+**Compare**: Threaded vs forking results for your workload
+
+---
+
+### Scenario 7: Production Simulation
+
+**Goal**: Simulate production-like mixed workload
+
+```bash
+rpycbench \
+  --num-connections 50 \
+  --num-requests 2000 \
+  --num-concurrent-clients 20 \
+  --requests-per-client 200 \
+  --test-binary-transfer \
+  --binary-file-sizes 1048576 \
+  --binary-chunk-size 65536 \
+  --output production-sim.json
+```
+
+**What it tests**: Connection establishment, latency, bandwidth, concurrency, file transfers
+**Time**: ~3-5 minutes
+**Use**: Baseline for production planning
+
+---
+
+### Scenario 8: RPyC Forking Only
+
+**Goal**: Test only forking server (may be needed for CPU-bound work)
+
+```bash
+rpycbench \
+  --skip-rpyc-threaded \
+  --skip-http \
+  --num-concurrent-clients 10
+```
+
+**What it tests**: RPyC forking server isolation
+**Time**: ~30 seconds
+**Use**: When GIL contention is a concern
+
+---
+
+### Scenario 9: HTTP Only Baseline
+
+**Goal**: Establish HTTP/REST baseline for comparison
+
+```bash
+rpycbench \
+  --skip-rpyc-threaded \
+  --skip-rpyc-forking \
+  --num-requests 5000 \
+  --output http-baseline.json
+```
+
+**What it tests**: Pure HTTP/Flask performance
+**Time**: ~20 seconds
+**Use**: Compare against existing HTTP services
+
+---
+
+### Scenario 10: Minimal Overhead Test
+
+**Goal**: Find absolute minimum latency/overhead
+
+```bash
+rpycbench \
+  --skip-rpyc-forking \
+  --num-connections 1 \
+  --num-requests 10000 \
+  --num-concurrent-clients 1
+```
+
+**What it tests**: Single connection, sequential requests
+**Time**: ~30 seconds
+**Result**: Best-case latency numbers (no concurrency overhead)
+
+---
+
+## Command Reference
+
+```
+rpycbench [options]
+```
+
+### Server Configuration
+
+```
+--rpyc-host HOST          RPyC server host (default: localhost)
+--rpyc-port PORT          RPyC server port (default: 18812)
+--http-host HOST          HTTP server host (default: localhost)
+--http-port PORT          HTTP server port (default: 5000)
+```
+
+### Test Selection
+
+```
+--skip-rpyc-threaded      Skip RPyC threaded server tests
+--skip-rpyc-forking       Skip RPyC forking server tests
+--skip-http               Skip HTTP server tests
+```
+
+### Benchmark Parameters
+
+```
+--num-connections N       Number of connections (default: 100)
+--num-requests N          Number of requests (default: 1000)
+--num-concurrent-clients N Number of concurrent clients (default: 10)
+--requests-per-client N   Requests per client (default: 100)
+```
+
+### Binary Transfer Benchmark
+
+```
+--test-binary-transfer    Enable binary file transfer benchmarks
+--binary-file-sizes SIZE [SIZE ...]
+                          File sizes in bytes (default: 1572864 134217728 524288000)
+--binary-chunk-size SIZE  Chunk size in bytes (default: 65536)
+                          Run multiple times with different values to compare
+--binary-iterations N     Number of iterations per test (default: 3)
+```
+
+### Output Options
+
+```
+--output FILE, -o FILE    Save JSON results to file
+--quiet, -q               Suppress summary output
+```
+
+### Example Combinations
+
+```bash
+# Comprehensive test with all options
+rpycbench \
+  --rpyc-host localhost \
+  --rpyc-port 18812 \
+  --http-host localhost \
+  --http-port 5000 \
+  --num-connections 200 \
+  --num-requests 5000 \
+  --num-concurrent-clients 50 \
+  --requests-per-client 100 \
+  --test-binary-transfer \
+  --binary-file-sizes 1048576 10485760 52428800 \
+  --binary-chunk-size 65536 \
+  --binary-iterations 5 \
+  --output comprehensive-results.json
+
+# Minimal fast test
+rpycbench \
+  --skip-rpyc-forking \
+  --skip-http \
+  --num-connections 5 \
+  --num-requests 50 \
+  --num-concurrent-clients 2 \
+  --quiet
+```
+
+---
+
+# Python API for Existing Apps
+
+**Purpose**: Integrate benchmarks into your existing application to measure real-world performance.
+
+Use the Python API to:
+- Measure your application's actual RPyC/HTTP performance
+- Compare baseline protocol performance vs your application overhead
+- Track performance over time in your codebase
+- Profile specific operations in your application
+
+## Basic Integration
+
+### Measuring a Simple Operation
 
 ```python
 from rpycbench.core.benchmark import BenchmarkContext
@@ -249,18 +404,15 @@ from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
 
 # Start server
 with RPyCServer(host='localhost', port=18812, mode='threaded'):
-
     # Create benchmark context
     with BenchmarkContext(
-        name="My App",
+        name="My Operation",
         protocol="rpyc",
         measure_latency=True,
-        measure_bandwidth=True,
     ) as bench:
-
-        # Your application code
         conn = create_rpyc_connection('localhost', 18812)
 
+        # Measure your operations
         for i in range(100):
             with bench.measure_request():
                 result = conn.root.ping()
@@ -271,159 +423,413 @@ with RPyCServer(host='localhost', port=18812, mode='threaded'):
     # Get results
     metrics = bench.get_results()
     stats = metrics.compute_statistics()
-    print(f"Latency: {stats['latency']['mean']*1000:.2f}ms")
+    print(f"Average latency: {stats['latency']['mean']*1000:.2f}ms")
+    print(f"P95 latency: {stats['latency']['p95']*1000:.2f}ms")
 ```
 
-## Usage Examples
+## Synthetic App Example
 
-### Example 1: Autonomous Run
+Here's a complete example of a synthetic application with remote function calls being benchmarked:
 
 ```python
-from rpycbench.benchmarks.suite import BenchmarkSuite
+"""
+Synthetic Application Example: Remote Data Processing Service
 
-suite = BenchmarkSuite()
-results = suite.run_all(
-    num_connections=100,
-    num_requests=1000,
-    num_concurrent_clients=10,
-)
-results.print_summary()
+This demonstrates a realistic application with:
+- Data validation
+- Remote computation
+- Error handling
+- Performance measurement
+"""
+
+import rpyc
+from rpycbench.core.benchmark import BenchmarkContext
+from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
+
+
+# Define your RPyC service (your application logic)
+class DataProcessingService(rpyc.Service):
+    """Example remote data processing service"""
+
+    def exposed_validate_data(self, data):
+        """Validate input data"""
+        if not isinstance(data, dict):
+            raise ValueError("Data must be a dictionary")
+        if 'values' not in data:
+            raise ValueError("Data must contain 'values' key")
+        return True
+
+    def exposed_compute_statistics(self, data):
+        """Compute statistics on data"""
+        values = data['values']
+        return {
+            'mean': sum(values) / len(values),
+            'min': min(values),
+            'max': max(values),
+            'count': len(values),
+        }
+
+    def exposed_process_batch(self, batch):
+        """Process a batch of data items"""
+        results = []
+        for item in batch:
+            # Simulate processing
+            processed = {
+                'id': item['id'],
+                'result': item['value'] * 2,
+                'status': 'processed'
+            }
+            results.append(processed)
+        return results
+
+    def exposed_store_results(self, results):
+        """Store processing results"""
+        # Simulate storage
+        return {'stored': len(results), 'status': 'success'}
+
+
+# Your application client
+class DataProcessingClient:
+    """Client for data processing service"""
+
+    def __init__(self, connection):
+        self.conn = connection
+
+    def validate(self, data):
+        """Validate data before processing"""
+        return self.conn.root.validate_data(data)
+
+    def compute(self, data):
+        """Compute statistics"""
+        return self.conn.root.compute_statistics(data)
+
+    def process_batch(self, batch):
+        """Process a batch of items"""
+        return self.conn.root.process_batch(batch)
+
+    def store(self, results):
+        """Store results"""
+        return self.conn.root.store_results(results)
+
+    def full_pipeline(self, data, batch):
+        """Full processing pipeline"""
+        # Validation
+        self.validate(data)
+
+        # Computation
+        stats = self.compute(data)
+
+        # Batch processing
+        results = self.process_batch(batch)
+
+        # Storage
+        store_result = self.store(results)
+
+        return {
+            'stats': stats,
+            'batch_results': results,
+            'storage': store_result
+        }
+
+
+# Benchmark your application
+def benchmark_application():
+    """Benchmark the data processing application"""
+
+    # Start server with your service
+    with RPyCServer(host='localhost', port=18812, mode='threaded'):
+        # Connect to server
+        conn = create_rpyc_connection('localhost', 18812)
+
+        # Create client
+        client = DataProcessingClient(conn)
+
+        # Prepare test data
+        test_data = {
+            'values': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        }
+
+        test_batch = [
+            {'id': i, 'value': i * 10}
+            for i in range(20)
+        ]
+
+        # Benchmark individual operations
+        print("=" * 80)
+        print("BENCHMARKING INDIVIDUAL OPERATIONS")
+        print("=" * 80)
+
+        # 1. Validation performance
+        with BenchmarkContext("Validation", "rpyc", measure_latency=True) as bench:
+            for _ in range(1000):
+                with bench.measure_request():
+                    client.validate(test_data)
+                    bench.record_request(success=True)
+
+        stats = bench.get_results().compute_statistics()
+        print(f"\nValidation:")
+        print(f"  Mean: {stats['latency']['mean']*1000:.2f}ms")
+        print(f"  P95:  {stats['latency']['p95']*1000:.2f}ms")
+
+        # 2. Computation performance
+        with BenchmarkContext("Computation", "rpyc", measure_latency=True) as bench:
+            for _ in range(1000):
+                with bench.measure_request():
+                    client.compute(test_data)
+                    bench.record_request(success=True)
+
+        stats = bench.get_results().compute_statistics()
+        print(f"\nComputation:")
+        print(f"  Mean: {stats['latency']['mean']*1000:.2f}ms")
+        print(f"  P95:  {stats['latency']['p95']*1000:.2f}ms")
+
+        # 3. Batch processing performance with bandwidth tracking
+        with BenchmarkContext("Batch Processing", "rpyc",
+                              measure_latency=True,
+                              measure_bandwidth=True) as bench:
+            for _ in range(100):
+                with bench.measure_request(bytes_sent=len(str(test_batch))):
+                    results = client.process_batch(test_batch)
+                    bench.record_request(success=True)
+
+        stats = bench.get_results().compute_statistics()
+        print(f"\nBatch Processing:")
+        print(f"  Mean latency: {stats['latency']['mean']*1000:.2f}ms")
+        print(f"  P95 latency:  {stats['latency']['p95']*1000:.2f}ms")
+        print(f"  Throughput:   {stats['upload_bandwidth']['mean']/(1024*1024):.2f} MB/s")
+
+        # 4. Full pipeline performance
+        print("\n" + "=" * 80)
+        print("BENCHMARKING FULL PIPELINE")
+        print("=" * 80)
+
+        with BenchmarkContext("Full Pipeline", "rpyc", measure_latency=True) as bench:
+            for _ in range(100):
+                with bench.measure_request():
+                    try:
+                        result = client.full_pipeline(test_data, test_batch)
+                        bench.record_request(success=True)
+                    except Exception as e:
+                        bench.record_request(success=False)
+
+        stats = bench.get_results().compute_statistics()
+        metrics = bench.get_results()
+        success_rate = (metrics.total_requests - metrics.failed_requests) / metrics.total_requests * 100
+
+        print(f"\nFull Pipeline:")
+        print(f"  Mean latency:  {stats['latency']['mean']*1000:.2f}ms")
+        print(f"  P95 latency:   {stats['latency']['p95']*1000:.2f}ms")
+        print(f"  P99 latency:   {stats['latency']['p99']*1000:.2f}ms")
+        print(f"  Success rate:  {success_rate:.1f}%")
+        print(f"  Total requests: {metrics.total_requests}")
+        print(f"  Failed:        {metrics.failed_requests}")
+
+        conn.close()
+
+
+if __name__ == '__main__':
+    benchmark_application()
 ```
 
-### Example 2: Baseline vs Application Overhead
+**Save this as `my_app_benchmark.py` and run**:
+```bash
+python my_app_benchmark.py
+```
 
-Compare baseline performance with your app overhead:
+## Measuring Application Overhead
+
+Compare your application's performance against baseline protocol performance:
+
+```python
+from rpycbench.core.benchmark import BenchmarkContext, LatencyBenchmark
+from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
+
+
+def compare_baseline_vs_application():
+    """Compare baseline RPyC performance vs application performance"""
+
+    with RPyCServer(host='localhost', port=18812, mode='threaded'):
+        # 1. Baseline benchmark (direct ping)
+        baseline_bench = LatencyBenchmark(
+            name="Baseline",
+            protocol="rpyc",
+            server_mode="threaded",
+            connection_factory=lambda: create_rpyc_connection('localhost', 18812),
+            request_func=lambda conn: conn.root.ping(),
+            num_requests=1000,
+        )
+        baseline_metrics = baseline_bench.execute()
+        baseline_stats = baseline_metrics.compute_statistics()
+
+        # 2. Application benchmark
+        conn = create_rpyc_connection('localhost', 18812)
+
+        # Your application class with business logic
+        class MyApp:
+            def __init__(self, connection):
+                self.conn = connection
+                self.cache = {}
+
+            def process_request(self, data):
+                # Your application logic (validation, caching, etc.)
+                if data in self.cache:
+                    return self.cache[data]
+
+                # Make remote call
+                result = self.conn.root.echo(data)
+
+                # Post-processing
+                self.cache[data] = result
+                return result
+
+        app = MyApp(conn)
+
+        with BenchmarkContext("Application", "rpyc", measure_latency=True) as bench:
+            for i in range(1000):
+                with bench.measure_request():
+                    app.process_request(f"data_{i}")
+                    bench.record_request(success=True)
+
+        app_metrics = bench.get_results()
+        app_stats = app_metrics.compute_statistics()
+
+        conn.close()
+
+        # Compare results
+        print("=" * 80)
+        print("BASELINE VS APPLICATION COMPARISON")
+        print("=" * 80)
+
+        baseline_mean = baseline_stats['latency']['mean'] * 1000
+        app_mean = app_stats['latency']['mean'] * 1000
+        overhead = app_mean - baseline_mean
+        overhead_pct = (overhead / baseline_mean) * 100
+
+        print(f"\nBaseline (direct RPyC call):")
+        print(f"  Mean: {baseline_mean:.2f}ms")
+        print(f"  P95:  {baseline_stats['latency']['p95']*1000:.2f}ms")
+
+        print(f"\nApplication (with business logic):")
+        print(f"  Mean: {app_mean:.2f}ms")
+        print(f"  P95:  {app_stats['latency']['p95']*1000:.2f}ms")
+
+        print(f"\nOverhead:")
+        print(f"  Absolute: {overhead:.2f}ms")
+        print(f"  Relative: {overhead_pct:.1f}%")
+
+        if overhead_pct > 50:
+            print(f"\n⚠️  Application overhead is {overhead_pct:.1f}% - consider optimization")
+        else:
+            print(f"\n✓ Application overhead is reasonable at {overhead_pct:.1f}%")
+
+
+if __name__ == '__main__':
+    compare_baseline_vs_application()
+```
+
+## Context Manager Patterns
+
+### Pattern 1: Simple Request Measurement
 
 ```python
 from rpycbench.core.benchmark import BenchmarkContext
 from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
 
-class MyApp:
-    def __init__(self, conn):
-        self.conn = conn
-
-    def process(self, data):
-        # Your app logic (validation, transformation, etc.)
-        return self.conn.root.echo(data)
-
 with RPyCServer(host='localhost', port=18812, mode='threaded'):
+    with BenchmarkContext("My Service", "rpyc", measure_latency=True) as ctx:
+        conn = create_rpyc_connection('localhost', 18812)
+
+        for i in range(100):
+            with ctx.measure_request():
+                conn.root.my_method(i)
+                ctx.record_request(success=True)
+
+        conn.close()
+
+    stats = ctx.get_results().compute_statistics()
+    print(f"Mean: {stats['latency']['mean']*1000:.2f}ms")
+```
+
+### Pattern 2: Bandwidth Measurement
+
+```python
+with BenchmarkContext("File Upload", "rpyc", measure_bandwidth=True) as ctx:
     conn = create_rpyc_connection('localhost', 18812)
 
-    # Baseline benchmark
-    with BenchmarkContext("Baseline", "rpyc", measure_latency=True) as bench:
-        for _ in range(100):
-            with bench.measure_request():
-                conn.root.ping()
-                bench.record_request(success=True)
-    baseline = bench.get_results()
-
-    # App benchmark
-    app = MyApp(conn)
-    with BenchmarkContext("With App", "rpyc", measure_latency=True) as bench:
-        for _ in range(100):
-            with bench.measure_request():
-                app.process(b'test')
-                bench.record_request(success=True)
-    app_metrics = bench.get_results()
+    for file_data in my_files:
+        with ctx.measure_request(bytes_sent=len(file_data)):
+            conn.root.upload(file_data)
+            ctx.record_request(success=True)
 
     conn.close()
 
-# Compare results
-baseline_lat = baseline.compute_statistics()['latency']['mean']
-app_lat = app_metrics.compute_statistics()['latency']['mean']
-overhead = app_lat - baseline_lat
-print(f"App overhead: {overhead*1000:.2f}ms")
+stats = ctx.get_results().compute_statistics()
+print(f"Upload speed: {stats['upload_bandwidth']['mean']/(1024*1024):.2f} MB/s")
 ```
 
-### Example 3: Baseline Comparison
-
-Run a quick baseline comparison:
+### Pattern 3: Connection Time Measurement
 
 ```python
-from rpycbench.benchmarks.suite import BenchmarkSuite
+with BenchmarkContext("Connections", "rpyc", measure_connection=True) as ctx:
+    for i in range(50):
+        with ctx.measure_connection_time():
+            conn = create_rpyc_connection('localhost', 18812)
 
-suite = BenchmarkSuite()
+        # Use connection
+        conn.root.ping()
+        conn.close()
 
-# Compare RPyC vs HTTP
-results = suite.run_all(
-    test_rpyc_threaded=True,
-    test_rpyc_forking=False,  # Skip for faster baseline
-    test_http=True,
-    num_connections=100,
-    num_requests=1000,
-)
-
-# Print formatted comparison
-results.print_summary()
-
-# Export for analysis
-data = results.to_dict()
-print(f"RPyC latency: {data['rpyc_threaded']['latency']['mean']*1000:.2f}ms")
-print(f"HTTP latency: {data['http_threaded']['latency']['mean']*1000:.2f}ms")
+stats = ctx.get_results().compute_statistics()
+print(f"Avg connection time: {stats['connection_time']['mean']*1000:.2f}ms")
 ```
 
-### Example 4: Custom Benchmarks
-
-Create custom benchmarks for specific scenarios:
+### Pattern 4: Error Handling
 
 ```python
-from rpycbench.core.benchmark import LatencyBenchmark
+with BenchmarkContext("API Calls", "rpyc", measure_latency=True) as ctx:
+    conn = create_rpyc_connection('localhost', 18812)
+
+    for request in requests:
+        with ctx.measure_request():
+            try:
+                result = conn.root.process(request)
+                ctx.record_request(success=True)
+            except Exception as e:
+                ctx.record_request(success=False)
+                # Handle error
+
+    conn.close()
+
+metrics = ctx.get_results()
+success_rate = (metrics.total_requests - metrics.failed_requests) / metrics.total_requests
+print(f"Success rate: {success_rate*100:.1f}%")
+```
+
+### Pattern 5: Programmatic Binary Transfer
+
+```python
+from rpycbench.core.benchmark import BinaryTransferBenchmark
 from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
 
 with RPyCServer(host='localhost', port=18812, mode='threaded'):
-
-    # Custom latency benchmark
-    bench = LatencyBenchmark(
-        name="Custom Test",
+    bench = BinaryTransferBenchmark(
+        name="My File Transfer",
         protocol="rpyc",
         server_mode="threaded",
         connection_factory=lambda: create_rpyc_connection('localhost', 18812),
-        request_func=lambda conn: conn.root.compute(1000),  # Custom method
-        num_requests=500,
+        upload_func=lambda conn, data: conn.root.upload_file(data),
+        download_func=lambda conn, size: conn.root.download_file(size),
+        upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
+        download_chunked_func=lambda conn, size, chunk_size: conn.root.download_file_chunked(size, chunk_size),
+        file_sizes=[1_048_576, 10_485_760],  # 1MB, 10MB
+        chunk_size=65_536,  # 64KB
+        iterations=5,
     )
 
     metrics = bench.execute()
-    stats = metrics.compute_statistics()
 
-    print(f"Mean latency: {stats['latency']['mean']*1000:.2f}ms")
-    print(f"P95 latency: {stats['latency']['p95']*1000:.2f}ms")
-```
-
-## Command Line Options
-
-```
-rpycbench [options]
-
-Server Configuration:
-  --rpyc-host HOST          RPyC server host (default: localhost)
-  --rpyc-port PORT          RPyC server port (default: 18812)
-  --http-host HOST          HTTP server host (default: localhost)
-  --http-port PORT          HTTP server port (default: 5000)
-
-Test Selection:
-  --skip-rpyc-threaded      Skip RPyC threaded server tests
-  --skip-rpyc-forking       Skip RPyC forking server tests
-  --skip-http               Skip HTTP server tests
-
-Benchmark Parameters:
-  --num-connections N       Number of connections (default: 100)
-  --num-requests N          Number of requests (default: 1000)
-  --num-concurrent-clients N Number of concurrent clients (default: 10)
-  --requests-per-client N   Requests per client (default: 100)
-
-Binary Transfer Benchmark:
-  --test-binary-transfer    Enable binary file transfer benchmarks
-  --binary-file-sizes SIZE [SIZE ...]
-                            File sizes in bytes (default: 1572864 134217728 524288000)
-                            Example: --binary-file-sizes 1048576 10485760
-  --binary-chunk-size SIZE  Chunk size in bytes for chunked transfers (default: 65536)
-                            Example: --binary-chunk-size 8192
-                            Run multiple times with different values to compare impact
-  --binary-iterations N     Number of iterations per test (default: 3)
-
-Output Options:
-  --output FILE, -o FILE    Save JSON results to file
-  --quiet, -q               Suppress summary output
+    for result in metrics.metadata['transfer_results']:
+        print(f"{result['type']}: {result['throughput_mbps']:.2f} Mbps")
 ```
 
 ## RPyC Profiling & Telemetry
@@ -437,38 +843,34 @@ from rpycbench.utils.profiler import create_profiled_connection
 from rpycbench.utils.telemetry import RPyCTelemetry
 from rpycbench.servers.rpyc_servers import RPyCServer
 
-# Start server
 with RPyCServer(host='localhost', port=18812, mode='threaded'):
-
-    # Create telemetry instance
     telemetry = RPyCTelemetry(
         enabled=True,
         track_netrefs=True,
-        slow_call_threshold=0.1,  # 100ms
-        deep_stack_threshold=5,    # Warn on 5+ nested calls
+        slow_call_threshold=0.1,
+        deep_stack_threshold=5,
     )
 
-    # Create profiled connection
     conn = create_profiled_connection(
         host='localhost',
         port=18812,
         telemetry_inst=telemetry,
     )
 
-    # Make remote calls - they're automatically tracked!
+    # Your remote calls are automatically tracked
     for i in range(10):
         conn.root.ping()
 
     conn.close()
 
-    # Print comprehensive telemetry report
+    # Print comprehensive report
     telemetry.print_summary()
 ```
 
 ### What Gets Tracked
 
 1. **Network Round Trips**: Count every remote call
-2. **NetRef Operations**: Track netref creation, access, and lifecycle
+2. **NetRef Operations**: Track netref creation, access, lifecycle
 3. **Call Stacks**: Monitor nesting depth and call chains
 4. **Slow Calls**: Automatically detect calls exceeding threshold
 5. **Performance**: Latency per call, total duration, resource usage
@@ -493,202 +895,40 @@ SLOW CALLS:
 --------------------------------------------------------------------------------
   process_large_batch              150.23ms  depth=0
   nested_computation                120.45ms  depth=2
-
---------------------------------------------------------------------------------
-DEEP CALL STACKS (>5 levels):
---------------------------------------------------------------------------------
-  Depth: 6
-    → get_object (method)
-    → access_property (getattr)
-    → call_method (method)
-    → another_call (method)
-    ...
 ```
 
-### Visualization Tools
+For more profiling examples, see the `examples/profiling_*.py` files in the repository.
 
-```python
-from rpycbench.utils.visualizer import (
-    format_call_tree,
-    format_timeline,
-    format_netref_report,
-    format_slow_calls_report,
-)
+---
 
-# Call tree shows nesting and hierarchy
-print(format_call_tree(telemetry))
+# How It Works
 
-# Timeline shows when calls happened
-print(format_timeline(telemetry, width=80))
+## Threading Model & Isolation
 
-# NetRef report shows object usage
-print(format_netref_report(telemetry))
-
-# Slow calls report with details
-print(format_slow_calls_report(telemetry, top_n=20))
-```
-
-### Using with Context Manager
-
-```python
-from rpycbench.utils.profiler import profile_rpyc_calls
-
-conn = rpyc.connect('localhost', 18812)
-
-with profile_rpyc_calls(conn, slow_call_threshold=0.05) as profiled:
-    # Use profiled connection
-    profiled.root.some_method()
-
-# Telemetry summary automatically printed on exit
-```
-
-### Diagnosing Performance Issues
-
-Common issues the profiler helps identify:
-
-1. **Excessive Round Trips**
-   ```python
-   # BAD: N round trips
-   for item in items:
-       conn.root.process(item)  # Each call = 1 round trip
-
-   # Profiler shows: 100 round trips for 100 items
-   ```
-
-2. **NetRef Overhead**
-   ```python
-   # Each netref access is a network call
-   obj = conn.root.get_object()  # Creates netref
-   obj.property  # Network call!
-   obj.method()  # Network call!
-
-   # Profiler shows: NetRef created with 10 accesses
-   ```
-
-3. **Deep Call Stacks**
-   ```python
-   # Nested remote calls create latency
-   conn.root.a()  # Which calls b()
-     # Which calls c()
-       # Which calls d()
-
-   # Profiler shows: Stack depth of 4, total latency accumulates
-   ```
-
-### Integration with Benchmarks
-
-Combine profiling with benchmarking to understand both baseline and actual performance:
-
-```python
-from rpycbench.core.benchmark import BenchmarkContext
-from rpycbench.utils.profiler import create_profiled_connection
-
-conn = create_profiled_connection('localhost', 18812)
-
-# Benchmark with profiling
-with BenchmarkContext("My App", "rpyc", measure_latency=True) as bench:
-    for _ in range(100):
-        with bench.measure_request():
-            conn.root.my_method()
-            bench.record_request(success=True)
-
-# Get both benchmark metrics AND telemetry
-metrics = bench.get_results()
-telemetry = conn.telemetry
-
-print(f"Latency: {metrics.compute_statistics()['latency']['mean']*1000:.2f}ms")
-print(f"Round trips: {telemetry.total_network_roundtrips}")
-```
-
-### Examples
-
-See the `examples/` directory for complete profiling examples:
-- `profiling_basic.py` - Basic profiling usage
-- `profiling_advanced.py` - Advanced features and visualization
-- `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
-
-## How It Works: Threading Model & Isolation
-
-### Server Execution Model
-
-**Important**: All benchmark servers run in **separate processes** from the benchmark client code. This provides true isolation without GIL interference:
+**Important**: All benchmark servers run in **separate processes** from the benchmark client code. This provides true isolation without GIL interference.
 
 1. **Server Lifecycle**:
-   - Server is spawned in a separate process before each test
-   - Server lifecycle is automatically managed by the parent process
+   - Server spawned in separate process before each test
+   - Server lifecycle automatically managed by parent process
    - Tests run against the server
-   - Server is cleanly terminated after the test completes
-   - Each server type is tested **sequentially** (one at a time)
+   - Server cleanly terminated after test completes
+   - Each server type tested sequentially (one at a time)
 
 2. **Process Isolation** (✅ No GIL Interference):
-   - **Server Process**: Runs completely independently from client
-   - **Client Process**: Runs 128+ concurrent client threads without GIL from server
-   - **Benefits**: True parallelism, accurate performance metrics, production-like environment
+   - **Server Process**: Runs independently from client
+   - **Client Process**: Runs 128+ concurrent threads without GIL from server
+   - **Benefits**: True parallelism, accurate metrics, production-like environment
 
 3. **Server Threading Models**:
-   - **RPyC ThreadedServer**: Creates NEW THREAD per client connection (in server process)
-   - **RPyC ForkingServer**: FORKS NEW PROCESS per client connection (from server process)
+   - **RPyC ThreadedServer**: New thread per client connection (in server process)
+   - **RPyC ForkingServer**: Fork new process per client (from server process)
    - **HTTP ThreadedServer**: Flask handles requests in threads (in server process)
 
 4. **Client Concurrency**:
    - Default: **128 concurrent connections** from single client process
-   - Each connection runs in its own thread within the client process
-   - Configurable: Can test with any number of concurrent clients
+   - Each connection runs in own thread within client process
+   - Configurable: Test with any number of concurrent clients
    - Per-connection metrics tracking available
-
-5. **Why This Design?**:
-   - ✅ **No GIL interference** between server and client
-   - ✅ **Easy to use** - single script, automatic lifecycle management
-   - ✅ **Production-like** - tests real server modes (threaded, forking)
-   - ✅ **High concurrency** - test with 128+ parallel connections
-   - ✅ **Accurate metrics** - server runs unencumbered by client GIL
-
-### Port Usage
-
-- RPyC servers use port 18812 by default (configurable)
-- HTTP servers use port 5000 by default (configurable)
-- Ports are reused between tests (servers are stopped between runs)
-
-### Code Execution Flow
-
-```
-1. Start RPyC Threaded Server (background thread)
-   └─> Run Connection Benchmark
-   └─> Run Latency Benchmark
-   └─> Run Bandwidth Benchmark
-   └─> Run Concurrent Benchmark
-2. Stop RPyC Threaded Server
-
-3. Start RPyC Forking Server (background thread)
-   └─> Run all benchmarks...
-4. Stop RPyC Forking Server
-
-5. Start HTTP Server (background thread)
-   └─> Run all benchmarks...
-6. Stop HTTP Server
-
-7. Compare results
-```
-
-## Architecture
-
-```
-rpycbench/
-├── core/
-│   ├── benchmark.py      # Core benchmark classes and context managers
-│   └── metrics.py        # Metrics collection and statistics
-├── servers/
-│   ├── rpyc_servers.py   # RPyC server implementations
-│   └── http_servers.py   # HTTP/REST server implementations
-├── benchmarks/
-│   └── suite.py          # Complete benchmark suite
-├── runners/
-│   └── autonomous.py     # Autonomous runner (CLI)
-└── utils/
-    ├── telemetry.py      # RPyC telemetry tracking
-    ├── profiler.py       # Connection profiling
-    └── visualizer.py     # Telemetry visualization
-```
 
 ## Benchmark Types
 
@@ -707,88 +947,11 @@ Measures data transfer rates for various payload sizes (1KB - 1MB):
 - Download bandwidth
 
 ### 4. Binary File Transfer Benchmark
-Measures large file transfer performance with configurable file sizes and chunk size:
-- Default file sizes: 1.5MB, 128MB, 500MB (configurable)
-- Single chunk size per run (default: 64KB, configurable)
+Measures large file transfer performance:
+- Default file sizes: 1.5MB, 128MB, 500MB
+- Single chunk size per run (default: 64KB)
 - Tests both chunked and non-chunked transfers
-- Useful for understanding latency vs bandwidth tradeoffs
-- Run multiple times with different chunk sizes to compare impact
-- Tracks throughput (Mbps) for each file size
-
-**Example Usage:**
-
-```python
-from rpycbench.benchmarks.suite import BenchmarkSuite
-
-suite = BenchmarkSuite()
-
-# Run with 64KB chunks (default)
-results = suite.run_all(
-    test_binary_transfer=True,
-    binary_file_sizes=[1_572_864, 134_217_728],  # 1.5MB, 128MB
-    binary_chunk_size=65_536,  # 64KB
-    binary_iterations=3,
-)
-
-# Compare with different chunk size
-results2 = suite.run_all(
-    test_binary_transfer=True,
-    binary_file_sizes=[1_572_864, 134_217_728],
-    binary_chunk_size=524_288,  # 512KB - see how it compares!
-    binary_iterations=3,
-)
-```
-
-Or programmatically:
-
-```python
-from rpycbench.core.benchmark import BinaryTransferBenchmark
-from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
-
-with RPyCServer(host='localhost', port=18812, mode='threaded'):
-    bench = BinaryTransferBenchmark(
-        name="Large File Transfer",
-        protocol="rpyc",
-        server_mode="threaded",
-        connection_factory=lambda: create_rpyc_connection('localhost', 18812),
-        upload_func=lambda conn, data: conn.root.upload_file(data),
-        download_func=lambda conn, size: conn.root.download_file(size),
-        upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
-        download_chunked_func=lambda conn, size, chunk_size: conn.root.download_file_chunked(size, chunk_size),
-        file_sizes=[1_572_864, 134_217_728, 524_288_000],  # 1.5MB, 128MB, 500MB
-        chunk_size=65_536,  # 64KB
-        iterations=3,
-    )
-
-    metrics = bench.execute()
-
-    # Access detailed results
-    for result in metrics.metadata['transfer_results']:
-        chunk_info = f", chunk={result['chunk_size_kb']:.0f}KB" if result['chunk_size'] else ""
-        print(f"{result['type']}: {result['file_size_mb']:.1f}MB{chunk_info} @ {result['throughput_mbps']:.2f} Mbps")
-```
-
-Or with context manager for integration:
-
-```python
-from rpycbench.core.benchmark import BenchmarkContext
-from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
-
-with RPyCServer(host='localhost', port=18812, mode='threaded'):
-    with BenchmarkContext("My App", "rpyc", measure_bandwidth=True) as ctx:
-        conn = create_rpyc_connection('localhost', 18812)
-
-        # Your application code
-        for file_data in my_files:
-            with ctx.measure_request(bytes_sent=len(file_data)):
-                conn.root.upload_file(file_data)
-                ctx.record_request(success=True)
-
-        conn.close()
-
-    stats = ctx.get_results().compute_statistics()
-    print(f"Upload bandwidth: {stats['upload_bandwidth']['mean'] / (1024*1024):.2f} MB/s")
-```
+- Run multiple times with different chunk sizes to compare
 
 ### 5. Concurrent Benchmark
 Measures performance with multiple simultaneous clients:
@@ -815,17 +978,7 @@ RPYC_THREADED
   Latency P99: 4.23ms
   Upload Bandwidth: 45.67 MB/s
   Download Bandwidth: 67.89 MB/s
-  Concurrent Connections: 10
-  Total Requests: 1000
   Success Rate: 100.00%
-  CPU Usage: 15.3% (max: 45.2%)
-  Memory Usage: 12.1% (max: 18.7%)
-
-HTTP_THREADED
-----------------------------------------
-  Connection Time: 2.45ms (±0.78ms)
-  Latency Mean: 3.21ms (±0.89ms)
-  ...
 ```
 
 ### JSON Output
@@ -836,102 +989,37 @@ HTTP_THREADED
     "name": "RPyC Latency (threaded)",
     "protocol": "rpyc",
     "server_mode": "threaded",
-    "connection_time": {
-      "mean": 0.00123,
-      "median": 0.00120,
-      "min": 0.00089,
-      "max": 0.00245,
-      "stdev": 0.00045,
-      "count": 100
-    },
     "latency": {
       "mean": 0.00234,
       "median": 0.00210,
       "p95": 0.00356,
-      "p99": 0.00423,
-      ...
+      "p99": 0.00423
     }
   }
 }
 ```
 
-## Extending the Suite
+---
 
-### Custom Server Implementation
+# Architecture
 
-```python
-from rpycbench.core.benchmark import BenchmarkBase
-
-class MyCustomBenchmark(BenchmarkBase):
-    def setup(self):
-        # Setup resources
-        pass
-
-    def run(self):
-        # Run benchmark
-        for _ in range(self.num_iterations):
-            start = time.time()
-            # Your benchmark code
-            duration = time.time() - start
-            self.metrics.add_latency(duration)
-
-    def teardown(self):
-        # Cleanup
-        pass
-
-metrics = MyCustomBenchmark(...).execute()
 ```
-
-### Custom Metrics
-
-```python
-from rpycbench.core.metrics import BenchmarkMetrics
-
-metrics = BenchmarkMetrics(name="Custom", protocol="rpyc")
-metrics.add_connection_time(0.001)
-metrics.add_latency(0.002)
-metrics.record_system_metrics()
-
-stats = metrics.compute_statistics()
+rpycbench/
+├── core/
+│   ├── benchmark.py      # Benchmark classes and context managers
+│   └── metrics.py        # Metrics collection and statistics
+├── servers/
+│   ├── rpyc_servers.py   # RPyC server implementations
+│   └── http_servers.py   # HTTP/REST server implementations
+├── benchmarks/
+│   └── suite.py          # Complete benchmark suite
+├── runners/
+│   └── autonomous.py     # CLI entry point
+└── utils/
+    ├── telemetry.py      # RPyC telemetry tracking
+    ├── profiler.py       # Connection profiling
+    └── visualizer.py     # Telemetry visualization
 ```
-
-## Contributing
-
-### Running Tests
-
-The test suite provides comprehensive coverage for all features:
-
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run all tests
-pytest rpycbench/tests/
-
-# Run with verbose output
-pytest rpycbench/tests/ -v
-
-# Run specific test file
-pytest rpycbench/tests/test_concurrency.py
-
-# Run specific test
-pytest rpycbench/tests/test_concurrency.py::TestHighConcurrency::test_128_concurrent_rpyc_connections
-
-# Run with coverage
-pytest rpycbench/tests/ --cov=rpycbench --cov-report=html
-```
-
-**Test Coverage:**
-- Server process isolation and lifecycle
-- All benchmark types (connection, latency, bandwidth, concurrent)
-- High concurrency (128+ connections)
-- Per-connection metrics tracking
-- Telemetry and profiling
-- Metrics computation and statistics
-- End-to-end workflows
-- Error handling and robustness
-
-See `rpycbench/tests/README.md` for detailed test documentation.
 
 ## Requirements
 
@@ -946,43 +1034,21 @@ See `rpycbench/tests/README.md` for detailed test documentation.
 
 ## Contributing
 
+### Running Tests
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest rpycbench/tests/
+
+# Run with coverage
+pytest rpycbench/tests/ --cov=rpycbench --cov-report=html
+```
+
 Contributions are welcome! Please feel free to submit pull requests.
 
 ## License
 
 See LICENSE file for details.
-
-## Examples
-
-See the `examples/` directory for complete examples:
-
-**Benchmarking:**
-- `baseline_comparison.py` - Quick baseline comparison of RPyC vs HTTP
-- `binary_transfer.py` - Large file transfer benchmarks with configurable sizes and chunk sizes
-- `high_concurrency_128.py` - 128 parallel connections with per-connection metrics
-- `autonomous_run.py` - Running full benchmark suite autonomously
-- `context_manager_basic.py` - Basic context manager usage
-- `context_manager_app_integration.py` - Integration with application code
-- `quick_test.py` - Quick verification test
-
-**Profiling:**
-- `profiling_basic.py` - Basic RPyC profiling
-- `profiling_advanced.py` - Advanced profiling with visualization
-- `profiling_diagnose_slow_calls.py` - Real-world performance diagnosis
-
-**High Concurrency:**
-
-Test 128 parallel connections and compare server modes:
-```bash
-# Test RPyC with 128 concurrent connections
-python examples/high_concurrency_128.py --rpyc
-
-# Test HTTP with 128 concurrent connections
-python examples/high_concurrency_128.py --http
-
-# Compare threaded vs forking server modes
-python examples/high_concurrency_128.py --compare
-
-# Run all tests
-python examples/high_concurrency_128.py
-```
