@@ -31,7 +31,11 @@ class SSHExecutor:
                 allow_agent=True,
             )
         except Exception as e:
-            raise ConnectionError(f"Failed to SSH connect to {self.user}@{self.host}:{self.port}: {e}")
+            raise ConnectionError(
+                f"Failed to SSH connect to {self.user}@{self.host}:{self.port}. "
+                f"Check that: (1) host is reachable, (2) SSH is running on port {self.port}, "
+                f"(3) public key authentication is configured. Error: {e}"
+            ) from e
 
     def disconnect(self):
         if self.client:
@@ -83,6 +87,15 @@ class SSHExecutor:
         sftp = self.client.open_sftp()
         try:
             sftp.put(local_path, remote_path)
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                f"Failed to transfer file to {self.host}:{remote_path}. "
+                f"Remote directory may not exist. Ensure parent directories are created first."
+            ) from e
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to transfer {local_path} to {self.host}:{remote_path}: {e}"
+            ) from e
         finally:
             sftp.close()
 

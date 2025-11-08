@@ -30,8 +30,17 @@ class BenchmarkSuite:
         self.rpyc_port = rpyc_port
         self.http_host = http_host
         self.http_port = http_port
-        self.http_base_url = f"http://{http_host}:{http_port}"
         self.remote_host = remote_host
+
+        if remote_host:
+            actual_host = remote_host.split('@')[1] if '@' in remote_host else remote_host
+            self.rpyc_connect_host = actual_host if rpyc_host == 'localhost' else rpyc_host
+            self.http_connect_host = actual_host if http_host == 'localhost' else http_host
+        else:
+            self.rpyc_connect_host = rpyc_host
+            self.http_connect_host = http_host
+
+        self.http_base_url = f"http://{self.http_connect_host}:{http_port}"
 
         self.results = BenchmarkResults()
 
@@ -59,9 +68,10 @@ class BenchmarkSuite:
             print("\n[1/3] Testing RPyC Threaded Server...")
             if self.remote_host:
                 from rpycbench.remote.servers import RemoteRPyCServer
+                bind_host = '0.0.0.0' if self.rpyc_host == 'localhost' else self.rpyc_host
                 server = RemoteRPyCServer(
                     remote_host=self.remote_host,
-                    host=self.rpyc_host,
+                    host=bind_host,
                     port=self.rpyc_port,
                     mode='threaded'
                 )
@@ -86,9 +96,10 @@ class BenchmarkSuite:
             print("\n[2/3] Testing RPyC Forking Server...")
             if self.remote_host:
                 from rpycbench.remote.servers import RemoteRPyCServer
+                bind_host = '0.0.0.0' if self.rpyc_host == 'localhost' else self.rpyc_host
                 server = RemoteRPyCServer(
                     remote_host=self.remote_host,
-                    host=self.rpyc_host,
+                    host=bind_host,
                     port=self.rpyc_port,
                     mode='forking'
                 )
@@ -113,9 +124,10 @@ class BenchmarkSuite:
             print("\n[3/3] Testing HTTP/REST Server...")
             if self.remote_host:
                 from rpycbench.remote.servers import RemoteHTTPServer
+                bind_host = '0.0.0.0' if self.http_host == 'localhost' else self.http_host
                 server = RemoteHTTPServer(
                     remote_host=self.remote_host,
-                    host=self.http_host,
+                    host=bind_host,
                     port=self.http_port,
                     threaded=True
                 )
@@ -159,7 +171,7 @@ class BenchmarkSuite:
             name=f"RPyC Connection ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
-            connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+            connection_factory=lambda: create_rpyc_connection(self.rpyc_connect_host, self.rpyc_port),
             num_connections=num_serial_connections,
         )
         metrics = conn_bench.execute()
@@ -171,7 +183,7 @@ class BenchmarkSuite:
             name=f"RPyC Latency ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
-            connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+            connection_factory=lambda: create_rpyc_connection(self.rpyc_connect_host, self.rpyc_port),
             request_func=lambda conn: conn.root.ping(),
             num_requests=num_requests,
         )
@@ -184,7 +196,7 @@ class BenchmarkSuite:
             name=f"RPyC Bandwidth ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
-            connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+            connection_factory=lambda: create_rpyc_connection(self.rpyc_connect_host, self.rpyc_port),
             upload_func=lambda conn, data: conn.root.upload(data),
             download_func=lambda conn, size: conn.root.download(size),
             data_sizes=[1024, 10240, 102400, 1048576],
@@ -200,7 +212,7 @@ class BenchmarkSuite:
                 name=f"RPyC Binary Transfer ({server_mode})",
                 protocol="rpyc",
                 server_mode=server_mode,
-                connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+                connection_factory=lambda: create_rpyc_connection(self.rpyc_connect_host, self.rpyc_port),
                 upload_func=lambda conn, data: conn.root.upload_file(data),
                 download_func=lambda conn, size: conn.root.download_file(size),
                 upload_chunked_func=lambda conn, chunks: conn.root.upload_file_chunked(chunks),
@@ -218,7 +230,7 @@ class BenchmarkSuite:
             name=f"RPyC Concurrent ({server_mode})",
             protocol="rpyc",
             server_mode=server_mode,
-            connection_factory=lambda: create_rpyc_connection(self.rpyc_host, self.rpyc_port),
+            connection_factory=lambda: create_rpyc_connection(self.rpyc_connect_host, self.rpyc_port),
             request_func=lambda conn: conn.root.ping(),
             num_clients=num_parallel_clients,
             requests_per_client=requests_per_client,

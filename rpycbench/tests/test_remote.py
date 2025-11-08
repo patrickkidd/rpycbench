@@ -128,7 +128,10 @@ def test_deployer_compute_checksum(walk_mock, path_mock):
 
 def test_deployer_get_remote_checksum():
     executor_mock = MagicMock()
-    executor_mock.execute.return_value = ('abc123', '', 0)
+    executor_mock.execute.side_effect = [
+        ('/home/user', '', 0),
+        ('abc123', '', 0),
+    ]
 
     deployer = RemoteDeployer(executor_mock, verbose=False)
     checksum = deployer._get_remote_checksum()
@@ -138,7 +141,10 @@ def test_deployer_get_remote_checksum():
 
 def test_deployer_get_remote_checksum_not_found():
     executor_mock = MagicMock()
-    executor_mock.execute.return_value = ('', 'not found', 1)
+    executor_mock.execute.side_effect = [
+        ('/home/user', '', 0),
+        ('', 'not found', 1),
+    ]
 
     deployer = RemoteDeployer(executor_mock, verbose=False)
     checksum = deployer._get_remote_checksum()

@@ -2,6 +2,50 @@
 
 A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) with HTTP/REST performance across multiple dimensions.
 
+
+```
+================================================================================
+BENCHMARK RESULTS SUMMARY
+================================================================================
+
+
+RPYC_THREADED
+----------------------------------------
+  Connection Time: 10.67ms (±6.69ms)
+  Latency Mean: 64.48ms (±14.33ms)
+  Latency Median: 64.96ms
+  Latency P95: 87.05ms
+  Latency P99: 96.98ms
+  Concurrent Connections: 128
+  Total Requests: 12800
+  Success Rate: 100.00%
+
+RPYC_FORKING
+----------------------------------------
+  Connection Time: 10.92ms (±8.36ms)
+  Latency Mean: 64.68ms (±13.99ms)
+  Latency Median: 64.91ms
+  Latency P95: 86.68ms
+  Latency P99: 97.87ms
+  Concurrent Connections: 128
+  Total Requests: 12800
+  Success Rate: 100.00%
+
+HTTP_THREADED
+----------------------------------------
+  Connection Time: 0.09ms (±0.05ms)
+  Latency Mean: 179.76ms (±110.44ms)
+  Latency Median: 159.08ms
+  Latency P95: 361.90ms
+  Latency P99: 570.77ms
+  Concurrent Connections: 128
+  Total Requests: 12800
+  Success Rate: 100.00%
+
+================================================================================```
+
+
+
 ## Table of Contents
 
 - [Features & Architecture](#features--architecture)
@@ -20,6 +64,7 @@ A comprehensive Python benchmark suite for comparing RPyC (Remote Python Call) w
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
 - [Contributing](#contributing)
+
 
 ## Features & Architecture
 
@@ -336,6 +381,118 @@ rpycbench --remote-host deploy@production-server \
 
 **Time**: Initial deployment ~30s, cached deployments ~5s overhead
 **Use**: Test performance across network, production-like infrastructure testing
+
+```
+patrick@turin:~/dev/rpycbench$ uv run rpycbench --remote-host parallels@hurin
+Starting Benchmark Suite...
+================================================================================
+
+[1/3] Testing RPyC Threaded Server...
+[Remote RPyC] Connecting to parallels@hurin...
+[Remote Deploy] Starting deployment to remote host...
+[Remote Deploy] Local code checksum: d766c9d8007e...
+[Remote Deploy] Checksums differ, deploying new code...
+[Remote Deploy] Packaging code...
+[Remote Deploy] Transferring code to hurin...
+[Remote Deploy] Extracting code on remote host...
+[Remote Deploy] Found uv at: /home/parallels/.local/bin/uv
+[Remote Deploy] Setting up Python environment...
+[Remote Deploy] Installing dependencies...
+[Remote Deploy] Deployment complete
+[Remote RPyC] Starting RPyC server (threaded) binding to 0.0.0.0:18812 on hurin...
+[Remote RPyC] Server started with PID 10022
+[Remote RPyC] Server ready
+  - Connection benchmark (100 serial connections)...
+  - Latency benchmark (1000 requests)...
+  - Bandwidth benchmark...
+  - Concurrent benchmark (10 parallel clients)...
+  Starting 10 concurrent clients...
+    10/10 clients completed...
+  All 10 clients completed
+[Remote RPyC] Stopping server (PID 10022)...
+[Remote RPyC] Disconnected
+
+[2/3] Testing RPyC Forking Server...
+[Remote RPyC] Connecting to parallels@hurin...
+[Remote Deploy] Starting deployment to remote host...
+[Remote Deploy] Local code checksum: d766c9d8007e...
+[Remote Deploy] Using cached deployment (checksum: d766c9d8007e...)
+[Remote RPyC] Starting RPyC server (forking) binding to 0.0.0.0:18812 on hurin...
+[Remote RPyC] Server started with PID 10193
+[Remote RPyC] Server ready
+  - Connection benchmark (100 serial connections)...
+  - Latency benchmark (1000 requests)...
+  - Bandwidth benchmark...
+  - Concurrent benchmark (10 parallel clients)...
+  Starting 10 concurrent clients...
+    10/10 clients completed...
+  All 10 clients completed
+[Remote RPyC] Stopping server (PID 10193)...
+[Remote RPyC] Disconnected
+
+[3/3] Testing HTTP/REST Server...
+[Remote HTTP] Connecting to parallels@hurin...
+[Remote Deploy] Starting deployment to remote host...
+[Remote Deploy] Local code checksum: d766c9d8007e...
+[Remote Deploy] Using cached deployment (checksum: d766c9d8007e...)
+[Remote HTTP] Starting HTTP server binding to 0.0.0.0:5000 on hurin...
+[Remote HTTP] Server started with PID 10361
+[Remote HTTP] Server ready
+  - Connection benchmark (100 serial connections)...
+  - Latency benchmark (1000 requests)...
+  - Bandwidth benchmark...
+  - Concurrent benchmark (10 parallel clients)...
+  Starting 10 concurrent clients...
+    10/10 clients completed...
+  All 10 clients completed
+[Remote HTTP] Stopping server (PID 10361)...
+[Remote HTTP] Disconnected
+
+================================================================================
+All benchmarks complete!
+
+================================================================================
+BENCHMARK RESULTS SUMMARY
+================================================================================
+
+
+RPYC_THREADED
+----------------------------------------
+  Connection Time: 1.76ms (±0.38ms)
+  Latency Mean: 7.01ms (±2.89ms)
+  Latency Median: 6.61ms
+  Latency P95: 12.00ms
+  Latency P99: 15.89ms
+  Concurrent Connections: 10
+  Total Requests: 1000
+  Success Rate: 100.00%
+
+RPYC_FORKING
+----------------------------------------
+  Connection Time: 1.04ms (±0.26ms)
+  Latency Mean: 5.20ms (±2.42ms)
+  Latency Median: 5.00ms
+  Latency P95: 6.69ms
+  Latency P99: 8.35ms
+  Concurrent Connections: 10
+  Total Requests: 1000
+  Success Rate: 100.00%
+
+HTTP_THREADED
+----------------------------------------
+  Connection Time: 0.10ms (±0.04ms)
+  Latency Mean: 17.72ms (±3.85ms)
+  Latency Median: 16.74ms
+  Latency P95: 25.81ms
+  Latency P99: 32.77ms
+  Concurrent Connections: 10
+  Total Requests: 1000
+  Success Rate: 100.00%
+
+================================================================================
+```
+
+
 
 ---
 

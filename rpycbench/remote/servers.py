@@ -40,7 +40,8 @@ class RemoteRPyCServer:
         self.deployer = RemoteDeployer(self.executor, verbose=self.verbose)
         self.venv_dir = self.deployer.deploy()
 
-        self._log(f"Starting RPyC server ({self.mode}) on {self.host}:{self.port}...")
+        actual_host = self.remote_host.split('@')[1] if '@' in self.remote_host else self.remote_host
+        self._log(f"Starting RPyC server ({self.mode}) binding to {self.host}:{self.port} on {actual_host}...")
 
         python_exe = f"{self.venv_dir}/bin/python"
         server_cmd = (
@@ -54,7 +55,12 @@ class RemoteRPyCServer:
         self._log(f"Server started with PID {self.server_pid}")
 
         if not self.executor.wait_for_port(self.port, timeout=30.0):
-            raise TimeoutError(f"Server port {self.port} not available after 30s")
+            raise TimeoutError(
+                f"Server on {self.executor.host}:{self.port} did not start within 30s. "
+                f"Check that: (1) port {self.port} is not in use, "
+                f"(2) firewall allows connections on port {self.port}, "
+                f"(3) remote process (PID {self.server_pid}) is running."
+            )
 
         self._log("Server ready")
 
@@ -120,7 +126,8 @@ class RemoteHTTPServer:
         self.deployer = RemoteDeployer(self.executor, verbose=self.verbose)
         self.venv_dir = self.deployer.deploy()
 
-        self._log(f"Starting HTTP server on {self.host}:{self.port}...")
+        actual_host = self.remote_host.split('@')[1] if '@' in self.remote_host else self.remote_host
+        self._log(f"Starting HTTP server binding to {self.host}:{self.port} on {actual_host}...")
 
         python_exe = f"{self.venv_dir}/bin/python"
         threaded_str = "True" if self.threaded else "False"
@@ -135,7 +142,12 @@ class RemoteHTTPServer:
         self._log(f"Server started with PID {self.server_pid}")
 
         if not self.executor.wait_for_port(self.port, timeout=30.0):
-            raise TimeoutError(f"Server port {self.port} not available after 30s")
+            raise TimeoutError(
+                f"Server on {self.executor.host}:{self.port} did not start within 30s. "
+                f"Check that: (1) port {self.port} is not in use, "
+                f"(2) firewall allows connections on port {self.port}, "
+                f"(3) remote process (PID {self.server_pid}) is running."
+            )
 
         self._log("Server ready")
 

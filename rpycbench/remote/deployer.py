@@ -12,9 +12,48 @@ class RemoteDeployer:
     def __init__(self, executor: SSHExecutor, verbose: bool = True):
         self.executor = executor
         self.verbose = verbose
-        self.remote_base_dir = "~/.rpycbench_remote"
-        self.remote_venv_dir = f"{self.remote_base_dir}/venv"
-        self.remote_code_dir = f"{self.remote_base_dir}/code"
+        self._home_dir = None
+        self._remote_base_dir = None
+        self._remote_venv_dir = None
+        self._remote_code_dir = None
+        self._uv_path = None
+
+    @property
+    def remote_base_dir(self):
+        if self._remote_base_dir is None:
+            self._ensure_paths_expanded()
+        return self._remote_base_dir
+
+    @property
+    def remote_venv_dir(self):
+        if self._remote_venv_dir is None:
+            self._ensure_paths_expanded()
+        return self._remote_venv_dir
+
+    @property
+    def remote_code_dir(self):
+        if self._remote_code_dir is None:
+            self._ensure_paths_expanded()
+        return self._remote_code_dir
+
+    def _ensure_paths_expanded(self):
+        if self._home_dir is None:
+            stdout, stderr, exit_code = self.executor.execute("echo $HOME", timeout=5.0)
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Failed to get remote home directory on {self.executor.host}. "
+                    f"SSH may not be configured correctly. Error: {stderr}"
+                )
+            self._home_dir = stdout.strip()
+            if not self._home_dir:
+                raise RuntimeError(
+                    f"Remote home directory is empty on {self.executor.host}. "
+                    f"This may indicate an SSH configuration problem."
+                )
+
+        self._remote_base_dir = f"{self._home_dir}/.rpycbench_remote"
+        self._remote_venv_dir = f"{self._remote_base_dir}/venv"
+        self._remote_code_dir = f"{self._remote_base_dir}/code"
 
     def _log(self, message: str):
         if self.verbose:
@@ -48,7 +87,7 @@ class RemoteDeployer:
                         continue
 
                     filepath = Path(root) / filename
-                    arcname = filepath.relative_to(source_dir.parent)
+                    arcname = filepath.relative_to(source_dir)
                     tar.add(filepath, arcname=arcname)
 
         checksum = hashlib.sha256()
@@ -73,17 +112,37 @@ class RemoteDeployer:
         self.executor.execute(f"mkdir -p {self.remote_code_dir}", timeout=10.0)
 
     def _check_uv_installed(self) -> bool:
-        stdout, stderr, exit_code = self.executor.execute("which uv", timeout=5.0)
-        return exit_code == 0
+        if self._uv_path:
+            return True
+
+        common_paths = [
+            "uv",
+            "~/.cargo/bin/uv",
+            "~/.local/bin/uv",
+            "/usr/local/bin/uv",
+        ]
+
+        for path in common_paths:
+            stdout, stderr, exit_code = self.executor.execute(f"command -v {path}", timeout=5.0)
+            if exit_code == 0:
+                self._uv_path = stdout.strip()
+                self._log(f"Found uv at: {self._uv_path}")
+                return True
+
+        return False
 
     def deploy(self) -> str:
         self._log("Starting deployment to remote host...")
 
-        package_root = Path(__file__).parent.parent.parent
-        rpycbench_package = package_root / "rpycbench"
+        project_root = Path(__file__).parent.parent.parent
+        rpycbench_package = project_root / "rpycbench"
+        pyproject_file = project_root / "pyproject.toml"
 
         if not rpycbench_package.exists():
             raise RuntimeError(f"Cannot find rpycbench package at {rpycbench_package}")
+
+        if not pyproject_file.exists():
+            raise RuntimeError(f"Cannot find pyproject.toml at {pyproject_file}")
 
         local_checksum = self._compute_code_checksum(rpycbench_package)
 
@@ -102,21 +161,25 @@ class RemoteDeployer:
         with tempfile.TemporaryDirectory() as tmpdir:
             tarball_path = Path(tmpdir) / "rpycbench.tar.gz"
             self._log("Packaging code...")
-            tarball_checksum = self._create_package_tarball(rpycbench_package, tarball_path)
+            tarball_checksum = self._create_package_tarball(project_root, tarball_path)
 
             remote_tarball = f"{self.remote_base_dir}/rpycbench.tar.gz"
             self._log(f"Transferring code to {self.executor.host}...")
             self.executor.transfer_file(str(tarball_path), remote_tarball)
 
             self._log("Extracting code on remote host...")
-            self.executor.execute(f"rm -rf {self.remote_code_dir}/*", timeout=10.0)
+            self.executor.execute(f"rm -rf {self.remote_code_dir}", timeout=10.0)
+            self.executor.execute(f"mkdir -p {self.remote_code_dir}", timeout=10.0)
             self.executor.execute(
-                f"tar -xzf {remote_tarball} -C {self.remote_base_dir}",
+                f"tar -xzf {remote_tarball} -C {self.remote_code_dir}",
                 timeout=30.0
             )
 
         if not self._check_uv_installed():
-            raise RuntimeError("uv is not installed on remote host. Please install it first.")
+            raise RuntimeError(
+                f"uv is not installed on {self.executor.host}. "
+                f"Install it with: curl -LsSf https://astral.sh/uv/install.sh | sh"
+            )
 
         self._log("Setting up Python environment...")
         venv_exists_stdout, _, venv_check_code = self.executor.execute(
@@ -127,7 +190,7 @@ class RemoteDeployer:
         if 'missing' in venv_exists_stdout:
             self._log("Creating virtual environment...")
             stdout, stderr, exit_code = self.executor.execute(
-                f"cd {self.remote_code_dir} && uv venv {self.remote_venv_dir}",
+                f"cd {self.remote_code_dir} && {self._uv_path} venv {self.remote_venv_dir}",
                 timeout=60.0
             )
             if exit_code != 0:
@@ -135,12 +198,15 @@ class RemoteDeployer:
 
         self._log("Installing dependencies...")
         stdout, stderr, exit_code = self.executor.execute(
-            f"cd {self.remote_code_dir} && {self.remote_venv_dir}/bin/pip install -e .",
+            f"cd {self.remote_code_dir} && {self._uv_path} pip install --python {self.remote_venv_dir}/bin/python -e .",
             timeout=120.0
         )
 
         if exit_code != 0:
-            raise RuntimeError(f"Failed to install rpycbench: {stderr}")
+            raise RuntimeError(
+                f"Failed to install rpycbench on {self.executor.host}. "
+                f"Check that the remote code at {self.remote_code_dir} is valid. Error: {stderr}"
+            )
 
         self._write_remote_checksum(local_checksum)
 
