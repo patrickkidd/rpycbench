@@ -12,6 +12,7 @@ from rpycbench.servers.rpyc_servers import RPyCServer, create_rpyc_connection
 from rpycbench.servers.http_servers import HTTPBenchmarkServer, create_http_session
 import requests
 import time
+from typing import Optional
 
 
 class BenchmarkSuite:
@@ -23,12 +24,14 @@ class BenchmarkSuite:
         rpyc_port=18812,
         http_host='localhost',
         http_port=5000,
+        remote_host: Optional[str] = None,
     ):
         self.rpyc_host = rpyc_host
         self.rpyc_port = rpyc_port
         self.http_host = http_host
         self.http_port = http_port
         self.http_base_url = f"http://{http_host}:{http_port}"
+        self.remote_host = remote_host
 
         self.results = BenchmarkResults()
 
@@ -54,7 +57,18 @@ class BenchmarkSuite:
         # Test RPyC Threaded Server
         if test_rpyc_threaded:
             print("\n[1/3] Testing RPyC Threaded Server...")
-            with RPyCServer(self.rpyc_host, self.rpyc_port, mode='threaded') as server:
+            if self.remote_host:
+                from rpycbench.remote.servers import RemoteRPyCServer
+                server = RemoteRPyCServer(
+                    remote_host=self.remote_host,
+                    host=self.rpyc_host,
+                    port=self.rpyc_port,
+                    mode='threaded'
+                )
+            else:
+                server = RPyCServer(self.rpyc_host, self.rpyc_port, mode='threaded')
+
+            with server:
                 self._run_rpyc_benchmarks(
                     'threaded',
                     num_serial_connections,
@@ -70,7 +84,18 @@ class BenchmarkSuite:
         # Test RPyC Forking Server
         if test_rpyc_forking:
             print("\n[2/3] Testing RPyC Forking Server...")
-            with RPyCServer(self.rpyc_host, self.rpyc_port, mode='forking') as server:
+            if self.remote_host:
+                from rpycbench.remote.servers import RemoteRPyCServer
+                server = RemoteRPyCServer(
+                    remote_host=self.remote_host,
+                    host=self.rpyc_host,
+                    port=self.rpyc_port,
+                    mode='forking'
+                )
+            else:
+                server = RPyCServer(self.rpyc_host, self.rpyc_port, mode='forking')
+
+            with server:
                 self._run_rpyc_benchmarks(
                     'forking',
                     num_serial_connections,
@@ -86,7 +111,18 @@ class BenchmarkSuite:
         # Test HTTP Server
         if test_http:
             print("\n[3/3] Testing HTTP/REST Server...")
-            with HTTPBenchmarkServer(self.http_host, self.http_port, threaded=True) as server:
+            if self.remote_host:
+                from rpycbench.remote.servers import RemoteHTTPServer
+                server = RemoteHTTPServer(
+                    remote_host=self.remote_host,
+                    host=self.http_host,
+                    port=self.http_port,
+                    threaded=True
+                )
+            else:
+                server = HTTPBenchmarkServer(self.http_host, self.http_port, threaded=True)
+
+            with server:
                 self._run_http_benchmarks(
                     num_serial_connections,
                     num_requests,

@@ -18,6 +18,10 @@ def main():
 
     # Server configuration
     parser.add_argument(
+        '--remote-host',
+        help='Remote host for server deployment (format: user@hostname or hostname). Enables automatic SSH deployment.'
+    )
+    parser.add_argument(
         '--rpyc-host',
         default='localhost',
         help='RPyC server host'
@@ -130,6 +134,7 @@ def main():
         rpyc_port=args.rpyc_port,
         http_host=args.http_host,
         http_port=args.http_port,
+        remote_host=args.remote_host,
     )
 
     try:

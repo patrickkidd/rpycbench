@@ -303,6 +303,42 @@ rpycbench \
 
 ---
 
+### Scenario 11: Remote Server Benchmarking
+
+**Goal**: Run benchmarks with server on a remote host via SSH
+
+```bash
+# Benchmark against remote server (automatic deployment)
+rpycbench --remote-host user@hostname
+
+# Benchmark with custom host/port configuration
+rpycbench --remote-host user@192.168.1.100 \
+  --rpyc-host 0.0.0.0 \
+  --http-host 0.0.0.0
+
+# Skip HTTP and test only RPyC on remote host
+rpycbench --remote-host deploy@production-server \
+  --skip-http \
+  --num-parallel-clients 32
+```
+
+**What it does**:
+- Automatically deploys rpycbench to remote host via SSH
+- Caches deployment (only redeploys when code changes)
+- Starts server processes on remote host
+- Runs benchmarks from local machine against remote server
+- Cleans up remote processes when done
+
+**Requirements**:
+- SSH access to remote host with public key authentication
+- `uv` installed on remote host
+- Firewall allows connections on specified ports
+
+**Time**: Initial deployment ~30s, cached deployments ~5s overhead
+**Use**: Test performance across network, production-like infrastructure testing
+
+---
+
 ## Command Reference
 
 ```
@@ -312,6 +348,8 @@ rpycbench [options]
 ### Server Configuration
 
 ```
+--remote-host USER@HOST   Remote host for server deployment via SSH (format: user@hostname)
+                          Enables automatic deployment and server management on remote host
 --rpyc-host HOST          RPyC server host (default: localhost)
 --rpyc-port PORT          RPyC server port (default: 18812)
 --http-host HOST          HTTP server host (default: localhost)
@@ -900,6 +938,65 @@ SLOW CALLS:
 ```
 
 For more profiling examples, see the `examples/profiling_*.py` files in the repository.
+
+## Remote Server Execution (Python API)
+
+Run benchmarks against a remote server using SSH deployment:
+
+```python
+from rpycbench.benchmarks.suite import BenchmarkSuite
+
+suite = BenchmarkSuite(
+    rpyc_host='0.0.0.0',
+    rpyc_port=18812,
+    http_host='0.0.0.0',
+    http_port=5000,
+    remote_host='user@remote-server.com',
+)
+
+results = suite.run_all(
+    test_rpyc_threaded=True,
+    test_rpyc_forking=True,
+    test_http=True,
+)
+
+results.print_summary()
+```
+
+**What happens**:
+1. Connects to remote host via SSH
+2. Deploys rpycbench code (cached if unchanged)
+3. Sets up Python environment on remote host
+4. Starts server processes remotely
+5. Runs benchmarks from local machine
+6. Stops servers and cleans up
+
+**Using Remote Servers with BenchmarkContext**:
+
+```python
+from rpycbench.core.benchmark import BenchmarkContext
+from rpycbench.remote.servers import RemoteRPyCServer
+from rpycbench.servers.rpyc_servers import create_rpyc_connection
+
+with RemoteRPyCServer(
+    remote_host='user@hostname',
+    host='0.0.0.0',
+    port=18812,
+    mode='threaded'
+):
+    with BenchmarkContext("My Remote Test", "rpyc", measure_latency=True) as bench:
+        conn = create_rpyc_connection('hostname', 18812)
+
+        for i in range(100):
+            with bench.measure_request():
+                result = conn.root.ping()
+                bench.record_request(success=True)
+
+        conn.close()
+
+    stats = bench.get_results().compute_statistics()
+    print(f"Remote latency: {stats['latency']['mean']*1000:.2f}ms")
+```
 
 ---
 
