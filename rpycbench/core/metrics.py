@@ -210,6 +210,9 @@ class BenchmarkResults:
             print(f"\n{protocol.upper()}")
             print("-" * 40)
 
+            if 'duration' in stats and stats['duration'] is not None:
+                print(f"  Total Duration: {stats['duration']:.2f}s")
+
             if 'connection_time' in stats:
                 ct = stats['connection_time']
                 print(f"  Connection Time: {ct['mean']*1000:.2f}ms (±{ct['stdev']*1000:.2f}ms)")
