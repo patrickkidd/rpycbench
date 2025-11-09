@@ -49,11 +49,13 @@ HTTP_THREADED
 
 ## Table of Contents
 
+- [Performance Study](#performance-study) - **Academic study with localhost & LAN results**
 - [Features & Architecture](#features--architecture)
 - [Quick Install](#quick-install)
 - [Installation Options](#installation-options)
 - [Command-Line Usage](#command-line-usage) - Testing RPyC vs HTTP/Flask generically
   - [Quick Start Examples](#quick-start-examples)
+  - [Parameter Sweep Tool](#parameter-sweep-tool)
   - [Cookbook: Common Scenarios](#cookbook-common-scenarios)
   - [Command Reference](#command-reference)
 - [Python API for Existing Apps](#python-api-for-existing-apps) - Integrating benchmarks into your application
@@ -68,6 +70,45 @@ HTTP_THREADED
 - [Architecture](#architecture)
 - [Contributing](#contributing)
 
+
+## Performance Study
+
+📊 **[Read the full performance study](benchmarks/PERFORMANCE_STUDY.md)** - Research paper with comprehensive localhost and LAN benchmarks.
+
+### Key Findings
+
+Testing on Intel Core i9-9980HK (16 cores, 32GB RAM) across two network topologies:
+
+| Topology | RPyC Mean Latency | HTTP Mean Latency | RPyC Advantage | Network Overhead |
+|----------|-------------------|-------------------|----------------|------------------|
+| **Localhost** | 3.3ms | 12.3ms | **3.7x faster** | Baseline |
+| **LAN (Parallels VM)** | 4.0-4.9ms | 12.3ms | **2.5-3.1x faster** | RPyC: +19-47%<br>HTTP: +0.5% |
+
+**Critical Insight**: RPyC provides substantial latency advantages but shows greater sensitivity to network overhead. HTTP maintains consistent performance across topologies.
+
+### Quick Comparison
+
+```bash
+# Run your own benchmarks
+pip install rpycbench
+
+# Localhost testing
+rpycbench-sweep --output-dir benchmarks --description "localhost only"
+
+# LAN/remote testing
+rpycbench-sweep --remote-host user@hostname --description "your topology"
+```
+
+Results include:
+- JSON files with full system specs and metrics
+- Publication-quality graphs (PNG)
+- Statistical analysis (mean, median, P95, P99)
+
+**When to use RPyC**: Python-to-Python communication on low-latency networks (<2ms) where 2-4x performance gain matters
+
+**When to use HTTP/REST**: Cross-language systems, public APIs, or networks with variable latency where consistency matters
+
+See the [full study](benchmarks/PERFORMANCE_STUDY.md) for detailed methodology, results, and production recommendations.
 
 ## Features & Architecture
 
@@ -164,6 +205,62 @@ rpycbench --num-parallel-clients 50 --requests-per-client 200
 # Test only binary transfers
 rpycbench --test-binary-transfer --binary-file-sizes 1048576 10485760
 ```
+
+## Parameter Sweep Tool
+
+The `rpycbench-sweep` command runs comprehensive benchmarks across localhost and remote hosts, collecting full system specifications and generating publication-quality graphs.
+
+### Quick Usage
+
+```bash
+# Localhost benchmarks
+rpycbench-sweep --output-dir benchmarks
+
+# Remote host benchmarks (requires SSH)
+rpycbench-sweep --remote-host user@hostname --description "your topology"
+```
+
+### What It Generates
+
+- **JSON results** with complete system specs (CPU, RAM, OS, Python version)
+- **Graphs**: Connection time, latency, percentiles, bandwidth comparisons
+- **Reproducible** on any infrastructure with SSH access
+
+### Example Output
+
+```
+benchmarks/
+  ├── results_local.json          # Localhost results
+  ├── results_remote.json         # Remote host results
+  ├── graphs/
+  │   ├── connection_time_comparison.png
+  │   ├── latency_comparison.png
+  │   ├── percentile_comparison.png
+  │   └── localhost_vs_lan_comparison.png
+  └── PERFORMANCE_STUDY.md        # Generated study template
+```
+
+### Advanced Options
+
+```bash
+# Skip specific tests
+rpycbench-sweep --skip-rpyc-forking --skip-http
+
+# Skip graph generation (JSON only)
+rpycbench-sweep --skip-graphs
+
+# Custom description for results
+rpycbench-sweep --description "AWS us-east-1 t3.xlarge"
+```
+
+### Use Cases
+
+- **Research**: Generate academic performance studies with reproducible methodology
+- **Infrastructure comparison**: Benchmark different network topologies (LAN, WAN, cloud)
+- **Architecture decisions**: Quantify RPyC vs HTTP trade-offs for your specific environment
+- **CI/CD**: Track performance regression across deployments
+
+See [benchmarks/PERFORMANCE_STUDY.md](benchmarks/PERFORMANCE_STUDY.md) for example output and interpretation.
 
 ## Cookbook: Common Scenarios
 
@@ -501,11 +598,13 @@ HTTP_THREADED
 
 ## Command Reference
 
+### rpycbench - Standard Benchmark Tool
+
 ```
 rpycbench [options]
 ```
 
-### Server Configuration
+#### Server Configuration
 
 ```
 --remote-host USER@HOST   Remote host for server deployment via SSH (format: user@hostname)
@@ -546,14 +645,14 @@ rpycbench [options]
 --binary-iterations N     Number of iterations per test (default: 3)
 ```
 
-### Output Options
+#### Output Options
 
 ```
 --output FILE, -o FILE    Save JSON results to file
 --quiet, -q               Suppress summary output
 ```
 
-### Example Combinations
+#### Example Combinations
 
 ```bash
 # Comprehensive test with all options
@@ -580,6 +679,61 @@ rpycbench \
   --num-requests 50 \
   --num-parallel-clients 2 \
   --quiet
+```
+
+---
+
+### rpycbench-sweep - Comprehensive Study Tool
+
+```
+rpycbench-sweep [options]
+```
+
+Generate complete performance studies with system specifications, graphs, and reproducible methodology.
+
+#### Options
+
+```
+--remote-host USER@HOST      Remote host for network testing (format: user@hostname)
+                            Enables SSH-based remote deployment and testing
+--output-dir PATH           Output directory for results and graphs (default: benchmarks)
+--skip-graphs              Skip graph generation (JSON results only)
+--description TEXT         Description of test topology for documentation
+--skip-rpyc-threaded       Skip RPyC threaded server tests
+--skip-rpyc-forking        Skip RPyC forking server tests
+--skip-http                Skip HTTP server tests
+```
+
+#### Output Structure
+
+```
+benchmarks/
+  ├── results_local.json          # Localhost benchmark results
+  ├── results_remote.json         # Remote host results (if --remote-host used)
+  ├── graphs/
+  │   ├── connection_time_comparison.png
+  │   ├── latency_comparison.png
+  │   ├── percentile_comparison.png
+  │   └── localhost_vs_lan_comparison.png  # Generated when both exist
+  └── PERFORMANCE_STUDY.md        # Optional: template for academic study
+```
+
+#### Examples
+
+```bash
+# Localhost only
+rpycbench-sweep
+
+# Remote testing with custom description
+rpycbench-sweep \
+  --remote-host parallels@hurin \
+  --description "Parallels VM on same MacOS host"
+
+# JSON only (skip graphs)
+rpycbench-sweep --skip-graphs --output-dir results
+
+# Test subset of protocols
+rpycbench-sweep --skip-rpyc-forking --remote-host aws@server
 ```
 
 ---
