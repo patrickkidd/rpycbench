@@ -1,12 +1,41 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "rpycbench"
-version = "0.1.0"
-description = "Benchmark suite comparing RPyC with HTTP/REST"
+dynamic = ["version"]
+description = "RPyC vs HTTP/REST performance benchmarking and profiling suite for optimizing existing Python applications"
+readme = "README.md"
 requires-python = ">=3.8"
+license = "Apache-2.0"
+authors = [
+    {name = "Dr. Patrick Stinson", email = "patrick@alaskafamilysystems.com"}
+]
+keywords = [
+    "rpyc",
+    "benchmark",
+    "performance",
+    "profiling",
+    "http",
+    "rest",
+    "optimization",
+    "networking",
+    "rpc",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Benchmark",
+    "Topic :: System :: Networking",
+]
 dependencies = [
     "rpyc>=5.3.0",
     "requests>=2.31.0",
@@ -17,6 +46,13 @@ dependencies = [
     "psutil>=5.9.0",
     "paramiko>=3.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/patrickkidd/rpycbench"
+Documentation = "https://github.com/patrickkidd/rpycbench#readme"
+Repository = "https://github.com/patrickkidd/rpycbench"
+Issues = "https://github.com/patrickkidd/rpycbench/issues"
+Changelog = "https://github.com/patrickkidd/rpycbench/releases"
 
 [project.optional-dependencies]
 test = [
@@ -36,3 +72,9 @@ rpycbench = "rpycbench.runners.autonomous:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rpycbench*"]
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "no-local-version"
+tag_regex = "^v(?P<version>\\d{4}\\.\\d{1,2}\\.\\d+)$"
+fallback_version = "2025.1.1"

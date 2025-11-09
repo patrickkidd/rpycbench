@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,6 +51,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -58,18 +62,21 @@ jobs:
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
-          pip install build wheel setuptools
+          pip install build wheel setuptools setuptools-scm
 
       - name: Build wheel
         run: |
           python -m build --wheel --outdir dist/
 
-      - name: Get version
+      - name: Get version from built wheel
         id: get_version
         run: |
-          VERSION=$(python -c 'import re; print(re.search(r"version = \"([^\"]+)\"", open("pyproject.toml").read()).group(1))')
+          WHEEL_FILE=$(ls dist/*.whl | head -1)
+          VERSION=$(python -c "import re; print(re.search(r'rpycbench-([^-]+)-', '$WHEEL_FILE').group(1))")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "wheel_file=$(basename $WHEEL_FILE)" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
+          echo "Wheel file: $(basename $WHEEL_FILE)"
 
       - name: Create Release
         id: create_release
@@ -77,18 +84,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}-build.${{ github.run_number }}
-          release_name: Build ${{ github.run_number }} (v${{ steps.get_version.outputs.version }})
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: v${{ steps.get_version.outputs.version }}
           draft: false
-          prerelease: true
+          prerelease: false
           body: |
-            Automated wheel build from commit ${{ github.sha }}
+            rpycbench version ${{ steps.get_version.outputs.version }}
+
+            Automated release from commit ${{ github.sha }}
 
             ## Installation
 
             Install directly from this release:
             ```bash
-            pip install https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.version }}-build.${{ github.run_number }}/rpycbench-${{ steps.get_version.outputs.version }}-py3-none-any.whl
+            pip install https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.version }}/${{ steps.get_version.outputs.wheel_file }}
             ```
 
             ## Changes
@@ -102,8 +111,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/rpycbench-${{ steps.get_version.outputs.version }}-py3-none-any.whl
-          asset_name: rpycbench-${{ steps.get_version.outputs.version }}-py3-none-any.whl
+          asset_path: ./dist/${{ steps.get_version.outputs.wheel_file }}
+          asset_name: ${{ steps.get_version.outputs.wheel_file }}
           asset_content_type: application/zip
 
       - name: Upload wheel as artifact
@@ -112,15 +121,6 @@ jobs:
           name: wheel
           path: dist/*.whl
           retention-days: 90
-
-      - name: Update latest release tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f latest
-          git push -f origin latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test:
     name: Test Wheel Installation
