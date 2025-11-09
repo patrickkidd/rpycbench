@@ -68,6 +68,7 @@ dev = [
 
 [project.scripts]
 rpycbench = "rpycbench.runners.autonomous:main"
+rpycbench-sweep = "rpycbench.runners.sweep:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
