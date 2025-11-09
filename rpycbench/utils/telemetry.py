@@ -28,6 +28,7 @@ class RPyCCallInfo:
     result_netref_id: Optional[int] = None
     exception: Optional[str] = None
     stack_depth: int = 0
+    source_location: Optional[str] = None
 
     def __str__(self):
         if self.duration:
@@ -122,6 +123,21 @@ class RPyCTelemetry:
 
             parent_id = self._call_stack[-1] if self._call_stack else None
 
+            source_location = None
+            if self.track_stacks:
+                frame = inspect.currentframe()
+                try:
+                    caller_frame = frame.f_back.f_back.f_back
+                    if caller_frame:
+                        filename = caller_frame.f_code.co_filename
+                        lineno = caller_frame.f_lineno
+                        func_name = caller_frame.f_code.co_name
+                        source_location = f"{filename}:{lineno} in {func_name}"
+                except:
+                    pass
+                finally:
+                    del frame
+
             call_info = RPyCCallInfo(
                 call_id=call_id,
                 timestamp=time.time(),
@@ -131,6 +147,7 @@ class RPyCTelemetry:
                 is_netref=is_netref,
                 netref_id=netref_id,
                 stack_depth=len(self._call_stack),
+                source_location=source_location,
             )
 
             self._calls[call_id] = call_info
@@ -240,6 +257,20 @@ class RPyCTelemetry:
         with self._lock:
             return [self._calls.get(cid) for cid in self._call_stack if cid in self._calls]
 
+    def _build_call_chain(self, call_id: int) -> List[RPyCCallInfo]:
+        """Build chain of calls from root to given call_id"""
+        chain = []
+        current_call = next((c for c in self._call_history if c.call_id == call_id), None)
+
+        while current_call:
+            chain.insert(0, current_call)
+            if current_call.parent_call_id:
+                current_call = next((c for c in self._call_history if c.call_id == current_call.parent_call_id), None)
+            else:
+                break
+
+        return chain
+
     def print_call_stack(self, title: str = "RPyC Call Stack"):
         """Print ASCII representation of current call stack"""
         print(f"\n{'='*80}")
@@ -302,13 +333,30 @@ class RPyCTelemetry:
         print(f"Slow Calls (>{self.slow_call_threshold}s): {stats['num_slow_calls']}")
         print(f"Avg Call Duration:        {stats['avg_call_duration']*1000:.2f}ms")
 
-        # Show slow calls
+        # Show slow calls with call stacks
         if self.slow_calls:
             print(f"\n{'-'*80}")
-            print("SLOW CALLS:")
+            print(f"SLOW CALLS (>{self.slow_call_threshold}s):")
             print(f"{'-'*80}")
+
             for call in self.slow_calls[-10:]:  # Last 10
-                print(f"  {call.method_name:30} {call.duration*1000:8.2f}ms  depth={call.stack_depth}")
+                print(f"\n  {call.method_name} ({call.call_type})")
+                print(f"    Duration:    {call.duration*1000:8.2f}ms")
+                print(f"    Stack Depth: {call.stack_depth}")
+
+                if call.source_location:
+                    print(f"    Called from: {call.source_location}")
+
+                if call.parent_call_id:
+                    print(f"    Call Stack:")
+                    stack_chain = self._build_call_chain(call.call_id)
+                    for i, stack_call in enumerate(stack_chain):
+                        indent = "      " + ("  " * i)
+                        arrow = "└─>" if i == len(stack_chain) - 1 else "├─>"
+                        duration_str = f"{stack_call.duration*1000:.2f}ms" if stack_call.duration else "..."
+                        print(f"{indent}{arrow} {stack_call.method_name} ({stack_call.call_type}) [{duration_str}]")
+                        if stack_call.source_location and i == len(stack_chain) - 1:
+                            print(f"{indent}    at {stack_call.source_location}")
 
         # Show deep stacks
         if self.deep_stacks:

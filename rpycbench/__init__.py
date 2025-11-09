@@ -20,6 +20,7 @@ from rpycbench.utils.profiler import (
     create_profiled_connection,
     profile_rpyc_calls,
 )
+from rpycbench.utils.markers import mark
 
 try:
     from importlib.metadata import version, PackageNotFoundError
@@ -46,4 +47,5 @@ __all__ = [
     "ProfiledConnection",
     "create_profiled_connection",
     "profile_rpyc_calls",
+    "mark",
 ]

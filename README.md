@@ -62,6 +62,8 @@ HTTP_THREADED
   - [Measuring Application Overhead](#measuring-application-overhead)
   - [Context Manager Patterns](#context-manager-patterns)
   - [RPyC Profiling & Telemetry](#rpyc-profiling--telemetry)
+    - [Automatic Profiling Without Code Changes](#automatic-profiling-without-code-changes)
+    - [Marking Critical Sections](#marking-critical-sections)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
 - [Contributing](#contributing)
@@ -1121,6 +1123,153 @@ SLOW CALLS:
 ```
 
 For more profiling examples, see the `examples/profiling_*.py` files in the repository.
+
+### Automatic Profiling Without Code Changes
+
+Profile any RPyC application from the command line without modifying your code:
+
+```bash
+# Run your script with automatic profiling
+python -m rpycbench.autobench myapp.py
+
+# With arguments to your script
+python -m rpycbench.autobench myapp.py --host localhost --port 18861
+
+# Run a module
+python -m rpycbench.autobench -m mymodule
+```
+
+**How it works:**
+- Automatically monkey-patches `rpyc.connect()` and `rpyc.utils.classic.connect()`
+- Tracks all RPyC calls transparently
+- Prints detailed telemetry summary on exit
+- Zero modifications to your application code
+
+**Example output:**
+```
+================================================================================
+RPYC TELEMETRY SUMMARY
+================================================================================
+Total Calls:              128
+Network Round Trips:      128
+NetRefs Created:          15
+Active NetRefs:           3
+Current Stack Depth:      0
+Max Stack Depth:          5
+Slow Calls (>0.1s):       3
+Avg Call Duration:        15.23ms
+
+--------------------------------------------------------------------------------
+SLOW CALLS (>0.1s):
+--------------------------------------------------------------------------------
+
+  remote_sys.version (getattr)
+    Duration:    150.23ms
+    Stack Depth: 2
+    Called from: /Users/user/myapp.py:45 in fetch_system_info
+    Call Stack:
+      ├─> getattr(modules) (getattr) [5.12ms]
+      └─> getattr(version) (getattr) [150.23ms]
+          at /Users/user/myapp.py:45 in fetch_system_info
+```
+
+**Configuration options:**
+```bash
+# Adjust slow call threshold
+python -m rpycbench.autobench myapp.py --slow-threshold 0.05
+
+# Adjust deep stack threshold
+python -m rpycbench.autobench myapp.py --deep-stack-threshold 10
+
+# Disable netref tracking for performance
+python -m rpycbench.autobench myapp.py --no-netrefs
+
+# Disable call stack tracking
+python -m rpycbench.autobench myapp.py --no-stacks
+```
+
+### Marking Critical Sections
+
+Add optional markers to identify important time windows in your application:
+
+```python
+from rpycbench import mark
+
+# Using context manager (recommended)
+with mark.section("Establishing 128 client connections"):
+    for i in range(128):
+        connections.append(rpyc.connect(host, port))
+
+# Using explicit start/end
+mark.start("Processing batch")
+process_large_batch()
+mark.end()
+```
+
+**Markers are no-ops when autobench is not running**, so you can leave them in your code permanently without any performance impact.
+
+**Example output with markers:**
+```
+================================================================================
+PROFILING MARKERS - CRITICAL SECTIONS
+================================================================================
+Establishing 128 client connections
+  Duration:       2543.12ms
+  Round Trips:    128
+  NetRefs Created: 128
+
+Processing batch
+  Duration:       856.34ms
+  Round Trips:    45
+  NetRefs Created: 12
+```
+
+**Complete example:**
+```python
+#!/usr/bin/env python3
+"""
+Example: myapp.py
+
+Run normally:    python myapp.py
+Run profiled:    python -m rpycbench.autobench myapp.py
+"""
+import rpyc.utils.classic
+
+try:
+    from rpycbench import mark
+except ImportError:
+    # Markers become no-ops if rpycbench not installed
+    class mark:
+        @staticmethod
+        def start(name): pass
+        @staticmethod
+        def end(): pass
+        @staticmethod
+        def section(name):
+            from contextlib import contextmanager
+            @contextmanager
+            def noop():
+                yield
+            return noop()
+
+
+def main():
+    with mark.section("Connecting to server"):
+        conn = rpyc.utils.classic.connect('localhost', 18812)
+
+    with mark.section("Fetching remote data"):
+        remote_os = conn.modules.os
+        cwd = remote_os.getcwd()
+        print(f"Remote CWD: {cwd}")
+
+    conn.close()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+See [examples/autobench_example.py](examples/autobench_example.py) for a complete working example.
 
 ## Remote Server Execution (Python API)
 
