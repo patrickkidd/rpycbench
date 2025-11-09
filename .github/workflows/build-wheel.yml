@@ -59,6 +59,41 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Determine next version and create tag
+        id: version
+        run: |
+          LATEST_TAG=$(git tag --list 'v[0-9][0-9][0-9][0-9].[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            YEAR=$(date +%Y)
+            MONTH=$(date +%-m)
+            NEW_VERSION="${YEAR}.${MONTH}.1"
+          else
+            VERSION=${LATEST_TAG#v}
+            YEAR=$(echo $VERSION | cut -d. -f1)
+            MONTH=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+
+            CURRENT_YEAR=$(date +%Y)
+            CURRENT_MONTH=$(date +%-m)
+
+            if [ "$YEAR" != "$CURRENT_YEAR" ] || [ "$MONTH" != "$CURRENT_MONTH" ]; then
+              NEW_VERSION="${CURRENT_YEAR}.${CURRENT_MONTH}.1"
+            else
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="${YEAR}.${MONTH}.${NEW_PATCH}"
+            fi
+          fi
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: $NEW_VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+          git push origin "v$NEW_VERSION"
+
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip
@@ -68,15 +103,11 @@ jobs:
         run: |
           python -m build --wheel --outdir dist/
 
-      - name: Get version from built wheel
-        id: get_version
+      - name: Get wheel filename
+        id: wheel
         run: |
           WHEEL_FILE=$(ls dist/*.whl | head -1)
-          VERSION=$(python -c "import re; print(re.search(r'rpycbench-([^-]+)-', '$WHEEL_FILE').group(1))")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "wheel_file=$(basename $WHEEL_FILE)" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
-          echo "Wheel file: $(basename $WHEEL_FILE)"
+          echo "file=$(basename $WHEEL_FILE)" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -84,12 +115,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: v${{ steps.get_version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          release_name: ${{ steps.version.outputs.tag }}
           draft: false
           prerelease: false
           body: |
-            rpycbench version ${{ steps.get_version.outputs.version }}
+            rpycbench version ${{ steps.version.outputs.version }}
 
             Automated release from commit ${{ github.sha }}
 
@@ -97,7 +128,12 @@ jobs:
 
             Install directly from this release:
             ```bash
-            pip install https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.version }}/${{ steps.get_version.outputs.wheel_file }}
+            pip install https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.wheel.outputs.file }}
+            ```
+
+            Or install latest from GitHub:
+            ```bash
+            pip install git+https://github.com/${{ github.repository }}.git
             ```
 
             ## Changes
@@ -111,8 +147,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/${{ steps.get_version.outputs.wheel_file }}
-          asset_name: ${{ steps.get_version.outputs.wheel_file }}
+          asset_path: ./dist/${{ steps.wheel.outputs.file }}
+          asset_name: ${{ steps.wheel.outputs.file }}
           asset_content_type: application/zip
 
       - name: Upload wheel as artifact
