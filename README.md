@@ -1030,6 +1030,31 @@ with RPyCServer(host='localhost', port=18812, mode='threaded'):
         print(f"{result['type']}: {result['throughput_mbps']:.2f} Mbps")
 ```
 
+## Complete Python API Documentation
+
+For comprehensive guides on using the Python API to profile and optimize RPyC applications:
+
+- **[Quickstart Guide](docs/quickstart-python-api.md)** - 5-minute diagnosis for slow RPyC applications
+  - Profile existing RPyC applications with zero code changes
+  - Measure baseline vs application performance
+  - Common scenarios: slow calls, concurrency issues, parallel clients
+
+- **[Cookbook](docs/cookbook-python-api.md)** - Real-world patterns and solutions
+  - Diagnostic flowchart for performance issues
+  - CPU-bound vs I/O-bound bottleneck diagnosis
+  - Server vs client bottleneck detection
+  - Understanding Python GIL and server modes
+  - Optimization techniques with before/after examples
+
+- **[API Reference](docs/api-reference.md)** - Complete API documentation
+  - All benchmark classes with parameters and examples
+  - Metrics interpretation guidance with red flags
+  - Profiling and telemetry API
+  - Visualization functions
+  - Server management
+
+- **[CPU vs I/O Comparison Example](examples/cpu_vs_io_comparison.py)** - Demonstrates GIL impact on performance
+
 ## RPyC Profiling & Telemetry
 
 Profile and diagnose performance issues in your RPyC applications by tracking network round trips, netref usage, and call patterns.
